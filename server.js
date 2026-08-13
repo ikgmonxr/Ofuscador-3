@@ -4,97 +4,85 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "5mb" }));
 app.use(express.static(path.join(__dirname, "public")));
+
+function randomName(index) {
+    return `_${index.toString(36)}x`;
+}
 
 function obfuscateLua(source, level) {
     let code = source;
 
-    // Eliminar comentarios simples
-    code = code.replace(/--(?!\[\[).*$/gm, "");
-
-    // Renombrar variables locales
-    const names = {};
-    let counter = 0;
+    // Conservamos strings para no romper código accidentalmente.
+    const strings = [];
 
     code = code.replace(
-        /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g,
-        (match, name) => {
-            if (!names[name]) {
-                counter++;
-                names[name] = `_v${counter.toString(36)}`;
-            }
-
-            return `local ${names[name]}`;
+        /(["'])(?:\\.|(?!\1).)*\1/g,
+        match => {
+            const id = strings.length;
+            strings.push(match);
+            return `__STRING_${id}__`;
         }
     );
 
-    for (const [oldName, newName] of Object.entries(names)) {
+    // Quitar comentarios de línea.
+    code = code.replace(/--(?!\[).*$/gm, "");
+
+    // Renombrar locales.
+    if (level >= 1) {
+        const variables = new Map();
+        let count = 0;
+
         code = code.replace(
-            new RegExp(`\\b${oldName}\\b`, "g"),
-            newName
+            /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g,
+            (full, name) => {
+                if (!variables.has(name)) {
+                    count++;
+                    variables.set(name, randomName(count));
+                }
+
+                return `local ${variables.get(name)}`;
+            }
         );
+
+        for (const [oldName, newName] of variables) {
+            const regex = new RegExp(`\\b${oldName}\\b`, "g");
+            code = code.replace(regex, newName);
+        }
     }
 
-    // Ocultar algunas cadenas
+    // Compactar.
+    if (level >= 1) {
+        code = code
+            .replace(/[ \t]+/g, " ")
+            .replace(/\n\s*\n/g, "\n")
+            .trim();
+    }
+
+    // Restaurar strings.
+    strings.forEach((value, index) => {
+        code = code.replaceAll(`__STRING_${index}__`, value);
+    });
+
+    // Capa visual adicional.
     if (level >= 2) {
-        code = code.replace(/(["'])(.*?)\1/g, (_, quote, text) => {
-            if (!text.length) return `""`;
+        const header = `-- IKGONAVI OBFUSCATED
+-- Protection level: ${level}
+`;
 
-            const bytes = [...text]
-                .map(c => c.charCodeAt(0))
-                .join(",");
-
-            return `string.char(${bytes})`;
-        });
+        code = header + code;
     }
 
-    // Compactación
-    code = code
-        .replace(/\s+/g, " ")
-        .replace(/\s*([=(),{};])\s*/g, "$1")
-        .trim();
-
-    // Capa adicional sencilla
+    // Inserta una pequeña cantidad de código señuelo.
     if (level >= 3) {
-        const encoded = Buffer.from(code).toString("base64");
+        code =
+`-- IKGONAVI EXTREME
+local __ikg_a = 17
+local __ikg_b = 29
+local __ikg_c = (__ikg_a * 3) - (__ikg_b - 4)
 
-        return `-- Protected Lua
-local __data="${encoded}"
-local __chars="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-
-local function __decode(data)
-    local out={}
-    local buffer=0
-    local bits=0
-
-    for i=1,#data do
-        local c=data:sub(i,i)
-        local p=__chars:find(c,1,true)
-
-        if p then
-            buffer=buffer*64+(p-1)
-            bits=bits+6
-
-            if bits>=8 then
-                bits=bits-8
-                local b=math.floor(buffer/(2^bits))%256
-                out[#out+1]=string.char(b)
-            end
-        end
-    end
-
-    return table.concat(out)
-end
-
-local __source=__decode(__data)
-
-local __load=loadstring or load
-local __fn=__load(__source)
-
-if __fn then
-    return __fn()
-end`;
+${code}`;
     }
 
     return code;
@@ -104,37 +92,39 @@ app.post("/api/obfuscate", (req, res) => {
     try {
         const { code, level } = req.body;
 
-        if (!code || typeof code !== "string") {
+        if (typeof code !== "string" || !code.trim()) {
             return res.status(400).json({
-                error: "Código Lua inválido."
+                error: "Pega un script Lua primero."
             });
         }
 
-        const selectedLevel = Math.min(
-            3,
-            Math.max(1, Number(level) || 1)
+        const selectedLevel = Math.max(
+            1,
+            Math.min(3, Number(level) || 1)
         );
 
         const result = obfuscateLua(code, selectedLevel);
 
         res.json({
             success: true,
-            code: result
+            code: result,
+            originalSize: code.length,
+            outputSize: result.length
         });
 
     } catch (error) {
         console.error(error);
 
         res.status(500).json({
-            error: "Error procesando el script."
+            error: "No se pudo procesar el script."
         });
     }
 });
 
-app.get("*", (req, res) => {
+app.get("*", (_, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 app.listen(PORT, () => {
-    console.log(`Lua Obfuscator running on port ${PORT}`);
+    console.log(`IKGONAVI running on port ${PORT}`);
 });
