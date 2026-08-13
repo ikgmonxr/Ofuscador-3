@@ -1,0 +1,401 @@
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    --bg: #050812;
+    --panel: rgba(10, 16, 29, .88);
+    --border: rgba(91, 144, 210, .18);
+    --text: #f4f8ff;
+    --muted: #8492aa;
+    --blue: #39a5ff;
+    --blue2: #176cff;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    background: var(--bg);
+    font-family: Inter, Arial, sans-serif;
+}
+
+.bg {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+
+    background:
+        radial-gradient(
+            circle at 50% -10%,
+            rgba(36, 124, 255, .28),
+            transparent 35%
+        ),
+        radial-gradient(
+            circle at 10% 70%,
+            rgba(0, 100, 255, .08),
+            transparent 30%
+        );
+
+    opacity: .9;
+}
+
+.navbar {
+    height: 76px;
+    width: min(1180px, 92%);
+    margin: auto;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+}
+
+.brand-icon {
+    width: 37px;
+    height: 37px;
+
+    display: grid;
+    place-items: center;
+
+    border-radius: 10px;
+
+    background: linear-gradient(
+        135deg,
+        #55baff,
+        #1267ff
+    );
+
+    box-shadow: 0 0 25px rgba(35, 137, 255, .3);
+
+    font-weight: 900;
+}
+
+.brand strong {
+    display: block;
+    letter-spacing: 1.5px;
+}
+
+.brand span {
+    display: block;
+    color: #64738c;
+    font-size: 9px;
+    letter-spacing: 2px;
+    margin-top: 2px;
+}
+
+.status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    color: #8ca0bb;
+    font-size: 11px;
+    letter-spacing: 1px;
+}
+
+.status i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #35e69b;
+    box-shadow: 0 0 12px #35e69b;
+}
+
+main {
+    width: min(1120px, 92%);
+    margin: auto;
+}
+
+.hero {
+    text-align: center;
+    padding: 90px 0 65px;
+}
+
+.pill {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+
+    padding: 8px 13px;
+
+    border: 1px solid rgba(67, 153, 255, .25);
+    border-radius: 100px;
+
+    background: rgba(23, 101, 190, .09);
+
+    color: #7dbbff;
+    font-size: 10px;
+    letter-spacing: 1.4px;
+}
+
+.hero h1 {
+    margin: 24px 0 17px;
+
+    font-size: clamp(43px, 7vw, 78px);
+    line-height: .98;
+    letter-spacing: -3px;
+}
+
+.hero h1 span {
+    background: linear-gradient(
+        90deg,
+        #58baff,
+        #3175ff
+    );
+
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.hero p {
+    max-width: 570px;
+    margin: auto;
+
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.7;
+}
+
+.workspace {
+    display: grid;
+    grid-template-columns: 1fr 130px 1fr;
+    align-items: center;
+    gap: 18px;
+}
+
+.editor-card {
+    overflow: hidden;
+
+    border: 1px solid var(--border);
+    border-radius: 16px;
+
+    background: var(--panel);
+
+    box-shadow:
+        0 25px 80px rgba(0,0,0,.25),
+        inset 0 1px rgba(255,255,255,.025);
+}
+
+.editor-header {
+    height: 52px;
+    padding: 0 15px;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    border-bottom: 1px solid rgba(255,255,255,.05);
+}
+
+.file {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    color: #9ba9bd;
+    font-size: 12px;
+}
+
+.lua-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4baeff;
+}
+
+.lua-dot.output {
+    background: #39e69a;
+}
+
+.clear-btn,
+.copy-btn {
+    border: 0;
+    background: transparent;
+
+    color: #687890;
+    font-size: 10px;
+    letter-spacing: 1px;
+
+    cursor: pointer;
+}
+
+.copy-btn:hover,
+.clear-btn:hover {
+    color: white;
+}
+
+textarea {
+    display: block;
+
+    width: 100%;
+    height: 330px;
+
+    padding: 20px;
+
+    resize: none;
+    outline: none;
+    border: 0;
+
+    background: #070c16;
+
+    color: #c9dcf6;
+
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.65;
+}
+
+textarea::placeholder {
+    color: #33435a;
+}
+
+.editor-footer {
+    height: 45px;
+    padding: 0 15px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    color: #53627a;
+    font-size: 10px;
+}
+
+select {
+    padding: 7px 9px;
+
+    border: 1px solid #24364f;
+    border-radius: 7px;
+
+    outline: none;
+
+    background: #0a1322;
+    color: #91a8c5;
+
+    font-size: 10px;
+}
+
+.action {
+    text-align: center;
+}
+
+#obfuscate {
+    width: 100%;
+    padding: 14px 8px;
+
+    border: 0;
+    border-radius: 10px;
+
+    background: linear-gradient(
+        135deg,
+        #38aaff,
+        #286cff
+    );
+
+    color: white;
+
+    font-weight: 800;
+    font-size: 11px;
+    letter-spacing: .7px;
+
+    cursor: pointer;
+
+    box-shadow: 0 10px 35px rgba(35, 115, 255, .22);
+
+    transition: .2s;
+}
+
+#obfuscate:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 40px rgba(35, 115, 255, .35);
+}
+
+#obfuscate:disabled {
+    opacity: .6;
+    cursor: wait;
+}
+
+.action small {
+    display: block;
+    margin-top: 10px;
+
+    color: #47566c;
+    font-size: 8px;
+    line-height: 1.4;
+}
+
+.features {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+
+    margin-top: 70px;
+}
+
+.feature {
+    padding: 24px;
+
+    border: 1px solid rgba(255,255,255,.055);
+    border-radius: 14px;
+
+    background: rgba(10, 16, 28, .5);
+}
+
+.feature b {
+    color: #348eff;
+    font-size: 11px;
+}
+
+.feature h3 {
+    margin: 12px 0 7px;
+    font-size: 14px;
+}
+
+.feature p {
+    margin: 0;
+
+    color: #64738a;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+footer {
+    padding: 55px 0 30px;
+
+    text-align: center;
+
+    color: #35445b;
+    font-size: 10px;
+}
+
+@media (max-width: 800px) {
+
+    .workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .action {
+        max-width: 220px;
+        margin: 0 auto;
+    }
+
+    .features {
+        grid-template-columns: 1fr;
+    }
+
+    .hero {
+        padding-top: 60px;
+    }
+
+    .hero h1 {
+        letter-spacing: -2px;
+    }
+}
