@@ -1,25 +1,56 @@
 const input = document.getElementById("input");
 const output = document.getElementById("output");
-const level = document.getElementById("level");
-const obfuscate = document.getElementById("obfuscate");
-const copy = document.getElementById("copy");
 
-obfuscate.addEventListener("click", async () => {
+const level = document.getElementById("level");
+const button = document.getElementById("obfuscate");
+
+const copy = document.getElementById("copy");
+const clear = document.getElementById("clear");
+
+const inputInfo = document.getElementById("inputInfo");
+const outputInfo = document.getElementById("outputInfo");
+const resultStatus = document.getElementById("resultStatus");
+
+function updateCounters() {
+    inputInfo.textContent =
+        `${input.value.length.toLocaleString()} characters`;
+
+    outputInfo.textContent =
+        `${output.value.length.toLocaleString()} characters`;
+}
+
+input.addEventListener("input", updateCounters);
+
+clear.addEventListener("click", () => {
+    input.value = "";
+    output.value = "";
+
+    resultStatus.textContent = "READY";
+
+    updateCounters();
+});
+
+button.addEventListener("click", async () => {
 
     if (!input.value.trim()) {
-        alert("Pega un script Lua primero.");
+        resultStatus.textContent = "NO INPUT";
+        input.focus();
         return;
     }
 
-    obfuscate.disabled = true;
-    obfuscate.textContent = "OBFUSCATING...";
+    button.disabled = true;
+    button.innerHTML = "<span>◌</span> PROCESSING...";
+    resultStatus.textContent = "PROCESSING";
 
     try {
+
         const response = await fetch("/api/obfuscate", {
             method: "POST",
+
             headers: {
                 "Content-Type": "application/json"
             },
+
             body: JSON.stringify({
                 code: input.value,
                 level: Number(level.value)
@@ -29,28 +60,48 @@ obfuscate.addEventListener("click", async () => {
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.error || "Error");
+            throw new Error(data.error || "Server error");
         }
 
         output.value = data.code;
 
-    } catch (error) {
-        alert(error.message);
-    }
+        resultStatus.textContent = "PROTECTED";
 
-    obfuscate.disabled = false;
-    obfuscate.textContent = "OBFUSCATE";
+        updateCounters();
+
+    } catch (error) {
+
+        resultStatus.textContent = "ERROR";
+
+        alert(error.message);
+
+    } finally {
+
+        button.disabled = false;
+        button.innerHTML = "<span>✦</span> OBFUSCATE";
+    }
 });
 
 copy.addEventListener("click", async () => {
 
-    if (!output.value) return;
+    if (!output.value) {
+        return;
+    }
 
-    await navigator.clipboard.writeText(output.value);
+    try {
 
-    copy.textContent = "COPIED!";
+        await navigator.clipboard.writeText(output.value);
 
-    setTimeout(() => {
-        copy.textContent = "COPIAR";
-    }, 1200);
+        copy.textContent = "COPIED ✓";
+
+        setTimeout(() => {
+            copy.textContent = "COPY";
+        }, 1500);
+
+    } catch {
+        output.select();
+        document.execCommand("copy");
+    }
 });
+
+updateCounters();
