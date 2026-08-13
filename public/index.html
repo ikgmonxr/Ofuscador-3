@@ -2,72 +2,164 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>IKGONAVI Obfuscator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>IKGONAVI • Lua Obfuscator</title>
+
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-<div class="background"></div>
+<div class="bg"></div>
 
-<main class="container">
+<header class="navbar">
+    <div class="brand">
+        <div class="brand-icon">I</div>
 
-    <header>
-        <div class="logo">IKGONAVI</div>
-        <div class="badge">LUA OBFUSCATOR</div>
-    </header>
+        <div>
+            <strong>IKGONAVI</strong>
+            <span>OBFUSCATOR</span>
+        </div>
+    </div>
+
+    <div class="status">
+        <i></i>
+        ONLINE
+    </div>
+</header>
+
+<main>
 
     <section class="hero">
-        <h1>Protect your <span>Lua scripts.</span></h1>
+
+        <div class="pill">
+            <span>✦</span>
+            LUA PROTECTION ENGINE
+        </div>
+
+        <h1>
+            Protect your code.<br>
+            <span>Hide your logic.</span>
+        </h1>
+
         <p>
-            Obfusca y transforma tus scripts Lua desde una interfaz rápida
-            y sencilla.
+            Transforma tus scripts Lua con nuestro sistema
+            de ofuscación rápido y sencillo.
         </p>
-    </section>
-
-    <section class="panel">
-
-        <div class="topbar">
-            <span>INPUT LUA</span>
-
-            <select id="level">
-                <option value="1">Basic</option>
-                <option value="2">Advanced</option>
-                <option value="3">Extreme</option>
-            </select>
-        </div>
-
-        <textarea
-            id="input"
-            placeholder="Pega tu código Lua aquí..."
-        ></textarea>
-
-        <button id="obfuscate">
-            OBFUSCATE
-        </button>
-
-        <div class="result-title">
-            OUTPUT
-        </div>
-
-        <textarea
-            id="output"
-            readonly
-            placeholder="El código ofuscado aparecerá aquí..."
-        ></textarea>
-
-        <button id="copy">
-            COPIAR
-        </button>
 
     </section>
 
-    <footer>
-        IKGONAVI Obfuscator • Powered by Node.js
-    </footer>
+    <section class="workspace">
+
+        <div class="editor-card">
+
+            <div class="editor-header">
+
+                <div class="file">
+                    <span class="lua-dot"></span>
+                    script.lua
+                </div>
+
+                <button class="clear-btn" id="clear">
+                    Clear
+                </button>
+
+            </div>
+
+            <textarea
+                id="input"
+                spellcheck="false"
+                placeholder="-- Pega tu script Lua aquí
+
+local player = game.Players.LocalPlayer
+
+print(player.Name)"
+            ></textarea>
+
+            <div class="editor-footer">
+                <span id="inputInfo">0 characters</span>
+
+                <select id="level">
+                    <option value="1">BASIC</option>
+                    <option value="2">ADVANCED</option>
+                    <option value="3">EXTREME</option>
+                </select>
+            </div>
+
+        </div>
+
+        <div class="action">
+
+            <button id="obfuscate">
+                <span>✦</span>
+                OBFUSCATE
+            </button>
+
+            <small>
+                Your code is processed by the server.
+            </small>
+
+        </div>
+
+        <div class="editor-card">
+
+            <div class="editor-header">
+
+                <div class="file">
+                    <span class="lua-dot output"></span>
+                    protected.lua
+                </div>
+
+                <button class="copy-btn" id="copy">
+                    COPY
+                </button>
+
+            </div>
+
+            <textarea
+                id="output"
+                spellcheck="false"
+                readonly
+                placeholder="Your protected code will appear here..."
+            ></textarea>
+
+            <div class="editor-footer">
+                <span id="outputInfo">0 characters</span>
+                <span id="resultStatus">READY</span>
+            </div>
+
+        </div>
+
+    </section>
+
+    <section class="features">
+
+        <div class="feature">
+            <b>01</b>
+            <h3>Variable Protection</h3>
+            <p>Renombra variables locales para dificultar la lectura.</p>
+        </div>
+
+        <div class="feature">
+            <b>02</b>
+            <h3>Code Compression</h3>
+            <p>Reduce espacios y elementos innecesarios del código.</p>
+        </div>
+
+        <div class="feature">
+            <b>03</b>
+            <h3>Multiple Levels</h3>
+            <p>Selecciona el nivel de transformación que necesitas.</p>
+        </div>
+
+    </section>
 
 </main>
+
+<footer>
+    © 2026 IKGONAVI • Lua Obfuscator
+</footer>
 
 <script src="app.js"></script>
 
