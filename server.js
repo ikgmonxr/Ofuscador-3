@@ -6,6 +6,8 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "5mb" }));
 
+/* IKGONAVI v5 ULTRA — Luraph-style + RC4 + Aqua/anti-sandbox anti-tamper */
+
 const RESERVED = new Set([
   "and","break","do","else","elseif","end","false","for","function",
   "goto","if","in","local","nil","not","or","repeat","return","then",
@@ -44,6 +46,15 @@ function xorBytes(str, key) {
   const kb = Buffer.from(String(key), "utf8");
   const out = [];
   for (let i = 0; i < str.length; i++) out.push(str.charCodeAt(i) ^ kb[i % kb.length]);
+  return out;
+}
+
+function bytesToString(arr) {
+  const CHUNK = 8192;
+  let out = "";
+  for (let i = 0; i < arr.length; i += CHUNK) {
+    out += String.fromCharCode.apply(null, arr.slice(i, i + CHUNK));
+  }
   return out;
 }
 
@@ -184,7 +195,7 @@ function protectStrings(code, level) {
       .replace(/\\r/g, "\r").replace(/\\"/g, '"')
       .replace(/\\'/g, "'").replace(/\\\\/g, "\\");
     let enc = xorBytes(content, key1);
-    enc = xorBytes(String.fromCharCode.apply(null, enc), key2);
+    enc = xorBytes(bytesToString(enc), key2);
     tables.push(luaByteTable(enc));
   }
   const decoder = "local " + decName + "=(function()local _a=\"" + key1 + "\" local _b=\"" + key2 + "\" local function _x(t,k)local r={}for i=1,#t do r[i]=string.char(bit32.bxor(t[i],string.byte(k,(i-1)%#k+1)))end return table.concat(r)end return function(t)local s=_x(t,_b)local p={}for i=1,#s do p[i]=string.byte(s,i)end return _x(p,_a)end end)()";
@@ -201,7 +212,12 @@ function buildAntiTamper() {
     "  if type(string)~='table' or type(math)~='table' or type(table)~='table' then __ikg_kill('P1') end",
     "  if type(string.byte)~='function' or string.byte('A')~=65 then __ikg_kill('P2') end",
     "  if type(math.floor)~='function' or math.floor(3.9)~=3 then __ikg_kill('P3') end",
-    "  if bit32 and type(bit32.bxor)=='function' and bit32.bxor(85,170)~=255 then __ikg_kill('P4') end",
+    "  if type(bit32)~='table' or type(bit32.bxor)~='function' or bit32.bxor(85,170)~=255 then __ikg_kill('P4') end",
+    "  if bit32.bxor(0x12345678,0xFFFFFFFF)~=0xEDCBA987 then __ikg_kill('P5') end",
+    "  if type(pcall)~='function' or type(xpcall)~='function' then __ikg_kill('P6') end",
+    "  local _ok,_a,_b,_c=pcall(function() return 17,nil,29 end)",
+    "  if not(_ok and _a==17 and _b==nil and _c==29) then __ikg_kill('P7') end",
+    "  if type(game)~='userdata' or type(workspace)~='userdata' then __ikg_kill('G1') end",
     "  if type(typeof)=='function' and typeof(game)=='table' then __ikg_kill('T1') end",
     "  if type(game)==type({}) then __ikg_kill('T2') end",
     "  local ok,mt=pcall(getmetatable,game)",
@@ -225,6 +241,8 @@ function buildAntiTamper() {
     "  end",
     "  local okS,Stats=pcall(function() return game:GetService('Stats') end)",
     "  if not okS or not Stats then __ikg_kill('ST1') end",
+    "  if type(task)~='table' then __ikg_kill('TS1') end",
+    "  if type(Instance)~='table' or type(Instance.new)~='function' then __ikg_kill('IN1') end",
     "end"
   ].join("\n");
 }
@@ -237,7 +255,7 @@ function buildUltra(full) {
 
   let layer = xorBytes(full, k1);
   layer = rc4(layer, rc4Key);
-  layer = xorBytes(String.fromCharCode.apply(null, layer), k2);
+  layer = xorBytes(bytesToString(layer), k2);
 
   const PAGE = 48;
   const pages = [];
@@ -246,8 +264,9 @@ function buildUltra(full) {
   const vm = ln();
   const names = {
     k1: ln(), k2: ln(), k3: ln(), rk: ln(),
-    boot: ln(), x: ln(), acc: ln(), t1: ln(),
-    src: ln(), fn: ln(), p: ln(), i: ln(), S: ln(), j: ln()
+    boot: ln(), x: ln(), acc: ln(), t1: ln(), t2: ln(),
+    src: ln(), fn: ln(), p: ln(), i: ln(), S: ln(),
+    j: ln(), n: ln()
   };
   const pageNames = pages.map(function() { return ln(); });
   const decoyNames = [ln(), ln(), ln(), ln()];
@@ -334,25 +353,21 @@ app.post("/api/obfuscate", function(req, res) {
     }
     const selectedLevel = Math.max(1, Math.min(3, Number(level) || 1));
     const result = obfuscateLua(code, selectedLevel);
-    res.json({
-      success: true,
-      code: result,
-      originalSize: code.length,
-      outputSize: result.length,
-      level: selectedLevel
-    });
+    res.json({ success: true, code: result, originalSize: code.length, outputSize: result.length, level: selectedLevel });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error interno: " + (err.message || "unknown") });
   }
 });
 
+app.get("/api/health", function(req, res) {
+  res.json({ ok: true, version: "v5-ultra" });
+});
+
 app.get("/", function(req, res) {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
-
 app.use(express.static(path.join(__dirname, "public")));
-
 app.listen(PORT, "0.0.0.0", function() {
   console.log("IKGONAVI v5 ULTRA running on port " + PORT);
 });
