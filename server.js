@@ -249,8 +249,10 @@ function buildUltra(full) {
   s += "  " + n.out + " = dec\n";
   s += "end\n";
   s += "local " + n.src + " = " + n.xor + "(" + n.out + ", " + n.key1 + ")\n";
-  s += "local " + n.fn + " = loadstring(" + n.src + ")\n";
-  s += "if not " + n.fn + " then error('IKG load failed', 0) end\n";
+  s += "local __ls = loadstring or load\n";
+  s += "if type(__ls) ~= \"function\" then error(\"IKG: loadstring not available in this environment\", 0) end\n";
+  s += "local " + n.fn + ", __err = __ls(" + n.src + ")\n";
+  s += "if not " + n.fn + " then error(\"IKG load failed: \" .. tostring(__err), 0) end\n";
   s += "return " + n.fn + "()\n";
   return s;
 }
@@ -261,17 +263,17 @@ function minify(code) {
 
 function obfuscateLua(source, level) {
   let code = source.trim();
-  const prot = protectStrings(code, level);
-  code = prot.code;
-  const decoder = prot.decoder || "";
   if (level >= 1) code = renameLocals(code);
   if (level >= 2) {
     code = obfuscateNumbers(code);
     code = injectJunk(code);
   }
+  const prot = protectStrings(code, level);
+  code = prot.code;
+  const decoder = prot.decoder || "";
   code = minify(code);
   if (level === 1) return "-- Protect by ikgonavi haha\n" + code;
-  if (level === 2) return "-- Protect by ikgonavi haha\n" + decoder + "\n" + code;
+  if (level === 2) return "-- Protect by ikgonavi haha\n" + (decoder ? decoder + "\n" : "") + code;
   return buildUltra((decoder ? decoder + "\n" : "") + code);
 }
 
