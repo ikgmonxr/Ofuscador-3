@@ -271,7 +271,7 @@ function buildUltra(full) {
   const pageNames = pages.map(function() { return ln(); });
   const decoyNames = [ln(), ln(), ln(), ln()];
 
-  let s = "--[[ IKGONAVI v5 ULTRA ]]\n";
+  let s = "-- Protect by ikgonavi haha\n";
   s += buildAntiTamper() + "\n";
   s += "local " + vm + "=({\n";
   s += "Hk=bit32.lshift,fk=bit32.rrotate,Uk=bit32.lrotate,O=bit32.bxor,u=bit32.band,W=bit32.bnot,Ek=bit32.countlz,B=bit32.countrz,\n";
