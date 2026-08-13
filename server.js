@@ -6,8 +6,6 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "5mb" }));
 
-/* IKGONAVI v5 ULTRA — Luraph-style + RC4 + Aqua/anti-sandbox anti-tamper */
-
 const RESERVED = new Set([
   "and","break","do","else","elseif","end","false","for","function",
   "goto","if","in","local","nil","not","or","repeat","return","then",
@@ -248,16 +246,15 @@ function buildUltra(full) {
   const vm = ln();
   const names = {
     k1: ln(), k2: ln(), k3: ln(), rk: ln(),
-    boot: ln(), x: ln(), acc: ln(), t1: ln(), t2: ln(),
-    src: ln(), fn: ln(), p: ln(), i: ln(), S: ln(),
-    j: ln(), n: ln()
+    boot: ln(), x: ln(), acc: ln(), t1: ln(),
+    src: ln(), fn: ln(), p: ln(), i: ln(), S: ln(), j: ln()
   };
   const pageNames = pages.map(function() { return ln(); });
   const decoyNames = [ln(), ln(), ln(), ln()];
 
   let s = "--[[ IKGONAVI v5 ULTRA ]]\n";
   s += buildAntiTamper() + "\n";
-  s += "local " + vm + "=(\n";
+  s += "local " + vm + "=({\n";
   s += "Hk=bit32.lshift,fk=bit32.rrotate,Uk=bit32.lrotate,O=bit32.bxor,u=bit32.band,W=bit32.bnot,Ek=bit32.countlz,B=bit32.countrz,\n";
   s += names.k1 + "=function()return\"" + k1 + "\"end,";
   s += names.k2 + "=function()return\"" + k2 + "\"end,";
@@ -337,7 +334,13 @@ app.post("/api/obfuscate", function(req, res) {
     }
     const selectedLevel = Math.max(1, Math.min(3, Number(level) || 1));
     const result = obfuscateLua(code, selectedLevel);
-    res.json({ success: true, code: result, originalSize: code.length, outputSize: result.length, level: selectedLevel });
+    res.json({
+      success: true,
+      code: result,
+      originalSize: code.length,
+      outputSize: result.length,
+      level: selectedLevel
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error interno: " + (err.message || "unknown") });
@@ -347,7 +350,9 @@ app.post("/api/obfuscate", function(req, res) {
 app.get("/", function(req, res) {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
+
 app.use(express.static(path.join(__dirname, "public")));
+
 app.listen(PORT, "0.0.0.0", function() {
   console.log("IKGONAVI v5 ULTRA running on port " + PORT);
 });
