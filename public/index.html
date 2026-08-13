@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>IKGONAVI Obfuscator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="background"></div>
+
+<main class="container">
+
+    <header>
+        <div class="logo">IKGONAVI</div>
+        <div class="badge">LUA OBFUSCATOR</div>
+    </header>
+
+    <section class="hero">
+        <h1>Protect your <span>Lua scripts.</span></h1>
+        <p>
+            Obfusca y transforma tus scripts Lua desde una interfaz rápida
+            y sencilla.
+        </p>
+    </section>
+
+    <section class="panel">
+
+        <div class="topbar">
+            <span>INPUT LUA</span>
+
+            <select id="level">
+                <option value="1">Basic</option>
+                <option value="2">Advanced</option>
+                <option value="3">Extreme</option>
+            </select>
+        </div>
+
+        <textarea
+            id="input"
+            placeholder="Pega tu código Lua aquí..."
+        ></textarea>
+
+        <button id="obfuscate">
+            OBFUSCATE
+        </button>
+
+        <div class="result-title">
+            OUTPUT
+        </div>
+
+        <textarea
+            id="output"
+            readonly
+            placeholder="El código ofuscado aparecerá aquí..."
+        ></textarea>
+
+        <button id="copy">
+            COPIAR
+        </button>
+
+    </section>
+
+    <footer>
+        IKGONAVI Obfuscator • Powered by Node.js
+    </footer>
+
+</main>
+
+<script src="app.js"></script>
+
+</body>
+</html>
