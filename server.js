@@ -5,82 +5,96 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "5mb" }));
-app.use(express.static(path.join(__dirname, "public")));
-
-function randomName(index) {
-    return `_${index.toString(36)}x`;
-}
 
 function obfuscateLua(source, level) {
     let code = source;
 
-    // Conservamos strings para no romper código accidentalmente.
+    // Guardar strings para evitar modificarlos accidentalmente
     const strings = [];
 
     code = code.replace(
-        /(["'])(?:\\.|(?!\1).)*\1/g,
-        match => {
+        /(["'])(?:\\.|(?!\1)[\s\S])*?\1/g,
+        (match) => {
             const id = strings.length;
             strings.push(match);
-            return `__STRING_${id}__`;
+            return `___IKG_STRING_${id}___`;
         }
     );
 
-    // Quitar comentarios de línea.
-    code = code.replace(/--(?!\[).*$/gm, "");
+    // Quitar comentarios simples
+    code = code.replace(/--(?!\[=*\[).*$/gm, "");
 
-    // Renombrar locales.
+    // Renombrar variables declaradas como local
     if (level >= 1) {
         const variables = new Map();
-        let count = 0;
+        let counter = 0;
 
-        code = code.replace(
-            /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g,
-            (full, name) => {
-                if (!variables.has(name)) {
-                    count++;
-                    variables.set(name, randomName(count));
-                }
+        const localRegex =
+            /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g;
 
-                return `local ${variables.get(name)}`;
+        let match;
+
+        while ((match = localRegex.exec(code)) !== null) {
+            const name = match[1];
+
+            if (
+                !variables.has(name) &&
+                ![
+                    "game",
+                    "workspace",
+                    "script",
+                    "require"
+                ].includes(name)
+            ) {
+                counter++;
+                variables.set(
+                    name,
+                    `_Ikg${counter.toString(36)}`
+                );
             }
-        );
+        }
 
         for (const [oldName, newName] of variables) {
-            const regex = new RegExp(`\\b${oldName}\\b`, "g");
+            const regex = new RegExp(
+                `\\b${oldName}\\b`,
+                "g"
+            );
+
             code = code.replace(regex, newName);
         }
     }
 
-    // Compactar.
-    if (level >= 1) {
-        code = code
-            .replace(/[ \t]+/g, " ")
-            .replace(/\n\s*\n/g, "\n")
-            .trim();
-    }
+    // Compactar
+    code = code
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n\s*\n/g, "\n")
+        .trim();
 
-    // Restaurar strings.
+    // Restaurar strings
     strings.forEach((value, index) => {
-        code = code.replaceAll(`__STRING_${index}__`, value);
+        code = code.replace(
+            `___IKG_STRING_${index}___`,
+            value
+        );
     });
 
-    // Capa visual adicional.
+    // Nivel Advanced
     if (level >= 2) {
-        const header = `-- IKGONAVI OBFUSCATED
--- Protection level: ${level}
-`;
+        code =
+`-- IKGONAVI PROTECTED
+-- Level: ADVANCED
 
-        code = header + code;
+${code}`;
     }
 
-    // Inserta una pequeña cantidad de código señuelo.
+    // Nivel Extreme
     if (level >= 3) {
         code =
-`-- IKGONAVI EXTREME
-local __ikg_a = 17
-local __ikg_b = 29
-local __ikg_c = (__ikg_a * 3) - (__ikg_b - 4)
+`-- IKGONAVI EXTREME PROTECTION
+
+local __IKG_A = 0x17
+local __IKG_B = 0x2A
+local __IKG_C = (__IKG_A * 7) + __IKG_B
 
 ${code}`;
     }
@@ -92,9 +106,12 @@ app.post("/api/obfuscate", (req, res) => {
     try {
         const { code, level } = req.body;
 
-        if (typeof code !== "string" || !code.trim()) {
+        if (
+            typeof code !== "string" ||
+            !code.trim()
+        ) {
             return res.status(400).json({
-                error: "Pega un script Lua primero."
+                error: "No se recibió ningún script Lua."
             });
         }
 
@@ -103,7 +120,10 @@ app.post("/api/obfuscate", (req, res) => {
             Math.min(3, Number(level) || 1)
         );
 
-        const result = obfuscateLua(code, selectedLevel);
+        const result = obfuscateLua(
+            code,
+            selectedLevel
+        );
 
         res.json({
             success: true,
@@ -116,15 +136,20 @@ app.post("/api/obfuscate", (req, res) => {
         console.error(error);
 
         res.status(500).json({
-            error: "No se pudo procesar el script."
+            error: "Error interno al ofuscar."
         });
     }
 });
 
-app.get("*", (_, res) => {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
+// Servir la página
+app.get("/", (req, res) => {
+    res.sendFile(
+        path.join(__dirname, "public", "index.html")
+    );
 });
 
-app.listen(PORT, () => {
-    console.log(`IKGONAVI running on port ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(
+        `IKGONAVI Obfuscator running on port ${PORT}`
+    );
 });
