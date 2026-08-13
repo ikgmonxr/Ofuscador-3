@@ -30,7 +30,6 @@ body {
         Arial,
         sans-serif;
 }
-/* BACKGROUND */
 body::before {
     content: "";
     position: fixed;
@@ -54,7 +53,6 @@ body::before {
             transparent
         );
 }
-/* NAVBAR */
 .navbar {
     width: min(1180px, 92%);
     height: 76px;
@@ -115,7 +113,6 @@ body::before {
         0 0 12px
         rgba(59,230,155,.8);
 }
-/* HERO */
 .hero {
     width: min(900px, 92%);
     margin: auto;
@@ -170,7 +167,6 @@ body::before {
     line-height: 1.7;
     font-size: 14px;
 }
-/* WORKSPACE */
 .workspace {
     width: min(1180px, 92%);
     margin: auto;
@@ -182,7 +178,6 @@ body::before {
     align-items: center;
     gap: 20px;
 }
-/* EDITOR */
 .editor {
     overflow: hidden;
     border:
@@ -286,7 +281,6 @@ select {
     font-size: 9px;
     cursor: pointer;
 }
-/* BUTTON */
 .action {
     text-align: center;
 }
@@ -334,7 +328,6 @@ select {
     font-size: 8px;
     line-height: 1.4;
 }
-/* BUTTONS */
 .small-button {
     border: 0;
     background: transparent;
@@ -345,7 +338,6 @@ select {
 .small-button:hover {
     color: white;
 }
-/* FEATURES */
 .features {
     width: min(1000px, 92%);
     margin:
@@ -384,7 +376,6 @@ select {
     font-size: 11px;
     line-height: 1.6;
 }
-/* FOOTER */
 footer {
     padding:
         55px
@@ -393,8 +384,8 @@ footer {
     text-align: center;
     color: #35445b;
     font-size: 9px;
+    line-height: 1.8;
 }
-/* MOBILE */
 @media (max-width: 850px) {
     .hero {
         padding-top: 60px;
@@ -447,7 +438,6 @@ footer {
     </p>
 </section>
 <section class="workspace">
-    <!-- INPUT -->
     <div class="editor">
         <div class="editor-top">
             <div class="file">
@@ -485,7 +475,6 @@ print(player.Name)"
             </select>
         </div>
     </div>
-    <!-- ACTION -->
     <div class="action">
         <button id="obfuscate">
             ✦ &nbsp; OBFUSCATE
@@ -494,7 +483,6 @@ print(player.Name)"
             Ready to process
         </p>
     </div>
-    <!-- OUTPUT -->
     <div class="editor">
         <div class="editor-top">
             <div class="file">
@@ -560,7 +548,9 @@ print(player.Name)"
     </div>
 </section>
 <footer>
-    © 2026 IKGONAVI • Lua / Roblox Obfuscator
+    © 2026 IKGONAVI • Lua / Roblox Obfuscator<br>
+    Credits: Ameyal • Marco • Ikgmonxr • jos1k<br>
+    Discord: <a href="https://discord.gg/RHgsJT6du" target="_blank" rel="noopener" style="color:#7fc1ff;text-decoration:none;">discord.gg/RHgsJT6du</a>
 </footer>
 <script>
 const input =
@@ -668,12 +658,16 @@ button.addEventListener(
                         })
                     }
                 );
-            const data =
-                await response.json();
+            const rawText = await response.text();
+            let data;
+            try {
+                data = JSON.parse(rawText);
+            } catch (parseErr) {
+                throw new Error("Server error (" + response.status + "): " + rawText.slice(0, 120));
+            }
             if (!response.ok) {
                 throw new Error(
-                    data.error ||
-                    "Obfuscation failed"
+                    (data && data.error) || ("HTTP " + response.status + " Obfuscation failed")
                 );
             }
             output.value =
@@ -687,7 +681,8 @@ button.addEventListener(
             result.textContent =
                 "ERROR";
             status.textContent =
-                error.message;
+                (error && error.message) ? error.message : "Request failed";
+            console.error(error);
         } finally {
             button.disabled =
                 false;
