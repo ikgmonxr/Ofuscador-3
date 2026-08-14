@@ -9,36 +9,63 @@ const RESERVED = new Set([
   "and","break","do","else","elseif","end","false","for","function","goto","if","in",
   "local","nil","not","or","repeat","return","then","true","until","while","_G","_ENV",
   "self","game","workspace","script","require","Instance","Enum","Color3","Vector3","CFrame",
-  "task","wait","spawn","delay","tick","time","os","math","string","table","pairs","ipairs"
+  "TweenInfo","task","wait","spawn","delay","tick","time","os","math","string","table",
+  "pairs","ipairs","next","type","typeof","print","warn","error","pcall","xpcall","select",
+  "unpack","rawget","rawset","rawequal","setmetatable","getmetatable","coroutine","debug",
+  "utf8","bit32","getgenv","setgenv","hookmetamethod","checkcaller","Drawing"
 ]);
 
-function randomName() {
+function randomName(length = 10) {
   let result = "_";
-  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  for (let i = 0; i < 10; i++) {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  for (let i = 0; i < length; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
 }
 
-function stripComments(code) {
-  let result = "";
+// Extrae cadenas de texto para protegerlas y elimina comentarios
+function stripCommentsAndExtractStrings(code) {
+  let cleanCode = "";
+  let strings = [];
   let i = 0;
-  
+
   while (i < code.length) {
-    if ((code[i] === '"' || code[i] === "'") && (i === 0 || code[i-1] !== "\\")) {
+    // Cadenas de texto simples o dobles
+    if (code[i] === '"' || code[i] === "'") {
       const quote = code[i];
-      result += code[i];
+      let strVal = quote;
       i++;
       while (i < code.length) {
-        result += code[i];
-        if (code[i] === quote && code[i-1] !== "\\") {
+        strVal += code[i];
+        if (code[i] === quote && code[i - 1] !== "\\") {
           i++;
           break;
         }
         i++;
       }
+      const placeholder = `__STR_PLACEHOLDER_${strings.length}__`;
+      strings.push(strVal);
+      cleanCode += placeholder;
     }
+    // Cadenas multilínea [[...]]
+    else if (code.substr(i, 2) === "[[") {
+      let strVal = "[[";
+      i += 2;
+      while (i < code.length) {
+        strVal += code[i];
+        if (code.substr(i, 2) === "]]") {
+          strVal += "]";
+          i += 2;
+          break;
+        }
+        i++;
+      }
+      const placeholder = `__STR_PLACEHOLDER_${strings.length}__`;
+      strings.push(strVal);
+      cleanCode += placeholder;
+    }
+    // Comentario multilínea --[[...]]
     else if (code.substr(i, 4) === "--[[") {
       i += 4;
       while (i < code.length - 1) {
@@ -49,47 +76,61 @@ function stripComments(code) {
         i++;
       }
     }
+    // Comentario de una línea --...
     else if (code.substr(i, 2) === "--") {
       while (i < code.length && code[i] !== "\n") {
         i++;
       }
       if (code[i] === "\n") {
-        result += "\n";
+        cleanCode += "\n";
         i++;
       }
     }
     else {
-      result += code[i];
+      cleanCode += code[i];
       i++;
     }
   }
-  return result;
+
+  return { cleanCode, strings };
 }
 
-function renameVars(code) {
-  const map = new Map();
+// Restaura los textos originales
+function restoreStrings(code, strings) {
+  for (let i = 0; i < strings.length; i++) {
+    const placeholder = `__STR_PLACEHOLDER_${i}__`;
+    code = code.replace(placeholder, strings[i]);
+  }
+  return code;
+}
+
+function renameVariables(code) {
+  const varMap = new Map();
+
+  // Buscar declaraciones locales
   const regex = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g;
   let match;
-  
+
   while ((match = regex.exec(code)) !== null) {
-    const name = match[1];
-    if (!map.has(name) && !RESERVED.has(name)) {
-      map.set(name, randomName());
+    const varName = match[1];
+    if (!varMap.has(varName) && !RESERVED.has(varName)) {
+      varMap.set(varName, randomName());
     }
   }
 
+  // Reemplazar variables (ordenadas por longitud para evitar remplazos parciales)
   let result = code;
-  const entries = Array.from(map.entries()).sort((a, b) => b[0].length - a[0].length);
-  
-  for (const [old, newName] of entries) {
-    const p = new RegExp("\\b" + old.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g");
-    result = result.replace(p, newName);
+  const entries = Array.from(varMap.entries()).sort((a, b) => b[0].length - a[0].length);
+
+  for (const [oldName, newName] of entries) {
+    const pattern = new RegExp("\\b" + oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g");
+    result = result.replace(pattern, newName);
   }
 
   return result;
 }
 
-function obfuscateNums(code) {
+function obfuscateNumbers(code) {
   return code.replace(/\b([1-9]\d{1,5})\b/g, (match, num) => {
     const n = parseInt(num);
     if (n < 2 || n > 100000) return num;
@@ -100,27 +141,36 @@ function obfuscateNums(code) {
   });
 }
 
-function minify(code) {
+function minifyCode(code) {
   return code
     .split("\n")
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
     .join("\n");
 }
 
 function obfuscate(code, level) {
-  code = stripComments(code);
+  console.log(`Processing: ${code.length} bytes, Level ${level}`);
 
+  // 1. Ocultar cadenas de texto y limpiar comentarios
+  const { cleanCode, strings } = stripCommentsAndExtractStrings(code);
+  let processedCode = cleanCode;
+
+  // 2. Renombrar variables
   if (level >= 1) {
-    code = renameVars(code);
+    processedCode = renameVariables(processedCode);
   }
 
+  // 3. Ofuscar números y minificar
   if (level >= 2) {
-    code = obfuscateNums(code);
-    code = minify(code);
+    processedCode = obfuscateNumbers(processedCode);
+    processedCode = minifyCode(processedCode);
   }
 
-  return code;
+  // 4. Restaurar las cadenas de texto originales
+  processedCode = restoreStrings(processedCode, strings);
+
+  return processedCode;
 }
 
 app.post("/api/obfuscate", (req, res) => {
@@ -128,27 +178,32 @@ app.post("/api/obfuscate", (req, res) => {
     const { code, level } = req.body;
 
     if (!code || typeof code !== "string") {
-      return res.status(400).json({ error: "No script" });
+      return res.status(400).json({ error: "No script provided" });
     }
 
     if (code.length > 50000000) {
-      return res.status(400).json({ error: "Too large" });
+      return res.status(400).json({ error: "Script too large" });
     }
 
-    const lv = Math.max(1, Math.min(2, Number(level) || 1));
-    const out = obfuscate(code, lv);
+    const selectedLevel = Math.max(1, Math.min(2, Number(level) || 1));
+    const output = obfuscate(code, selectedLevel);
 
     res.json({
       success: true,
-      code: out,
+      code: output,
       inputSize: code.length,
-      outputSize: out.length,
-      level: lv
+      outputSize: output.length,
+      level: selectedLevel
     });
 
   } catch (err) {
+    console.error("Error:", err);
     res.status(500).json({ error: err.message });
   }
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, version: "simple-v2" });
 });
 
 app.get("/", (req, res) => {
@@ -157,6 +212,10 @@ app.get("/", (req, res) => {
 
 app.use(express.static(path.join(__dirname, "public")));
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Running on port ${PORT}`);
-});
+module.exports = app;
+
+if (require.main === module) {
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`[OBFUSCATOR] Port ${PORT}`);
+  });
+}
