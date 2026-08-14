@@ -4,8 +4,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "50mb" }));
-
-// Habilitar la carpeta pública para servir el index.html
 app.use(express.static(path.join(__dirname, "public")));
 
 const RESERVED = new Set([
@@ -18,7 +16,7 @@ const RESERVED = new Set([
   "utf8","bit32","getgenv","setgenv","hookmetamethod","checkcaller","Drawing"
 ]);
 
-function randomName(length = 12) {
+function randomName(length = 10) {
   let result = "_0x";
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   for (let i = 0; i < length; i++) {
@@ -27,12 +25,32 @@ function randomName(length = 12) {
   return result;
 }
 
-function stripCommentsAndExtractStrings(code) {
-  let cleanCode = "";
+// 1. Extracción segura de cadenas y remoción de comentarios
+function extractStringsAndStripComments(code) {
   let strings = [];
+  let cleanCode = "";
   let i = 0;
 
   while (i < code.length) {
+    // Comentarios multilínea --[[ ... ]]
+    if (code.substr(i, 4) === "--[[") {
+      i += 4;
+      while (i < code.length && code.substr(i, 2) !== "]]") {
+        i++;
+      }
+      i += 2;
+      continue;
+    }
+
+    // Comentarios simples --
+    if (code.substr(i, 2) === "--") {
+      while (i < code.length && code[i] !== "\n") {
+        i++;
+      }
+      continue;
+    }
+
+    // Cadenas con comillas dobles, simples o bloques [[ ]]
     if (code[i] === '"' || code[i] === "'") {
       const quote = code[i];
       let strVal = quote;
@@ -45,10 +63,13 @@ function stripCommentsAndExtractStrings(code) {
         }
         i++;
       }
-      const placeholder = `__STR_PLACEHOLDER_${strings.length}__`;
+      const placeholder = `__STR_${strings.length}__`;
       strings.push(strVal);
       cleanCode += placeholder;
-    } else if (code.substr(i, 2) === "[[") {
+      continue;
+    }
+
+    if (code.substr(i, 2) === "[[") {
       let strVal = "[[";
       i += 2;
       while (i < code.length) {
@@ -60,37 +81,22 @@ function stripCommentsAndExtractStrings(code) {
         }
         i++;
       }
-      const placeholder = `__STR_PLACEHOLDER_${strings.length}__`;
+      const placeholder = `__STR_${strings.length}__`;
       strings.push(strVal);
       cleanCode += placeholder;
-    } else if (code.substr(i, 4) === "--[[") {
-      i += 4;
-      while (i < code.length - 1) {
-        if (code.substr(i, 2) === "]]") {
-          i += 2;
-          break;
-        }
-        i++;
-      }
-    } else if (code.substr(i, 2) === "--") {
-      while (i < code.length && code[i] !== "\n") {
-        i++;
-      }
-      if (code[i] === "\n") {
-        cleanCode += "\n";
-        i++;
-      }
-    } else {
-      cleanCode += code[i];
-      i++;
+      continue;
     }
+
+    cleanCode += code[i];
+    i++;
   }
 
   return { cleanCode, strings };
 }
 
+// 2. Codificación XOR de cadenas con fallback de compatibilidad
 function encodeStrings(strings) {
-  const xorKey = Math.floor(Math.random() * 250) + 1;
+  const xorKey = Math.floor(Math.random() * 200) + 20;
   const encodedStrings = strings.map(s => {
     let raw = s;
     if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
@@ -98,6 +104,16 @@ function encodeStrings(strings) {
     } else if (raw.startsWith("[[") && raw.endsWith("]]")) {
       raw = raw.slice(2, -2);
     }
+
+    // Reemplazo manual de secuencias de escape comunes
+    raw = raw
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\r")
+      .replace(/\\t/g, "\t")
+      .replace(/\\"/g, '"')
+      .replace(/\\'/g, "'")
+      .replace(/\\\\/g, "\\");
+
     const bytes = [];
     for (let i = 0; i < raw.length; i++) {
       bytes.push(raw.charCodeAt(i) ^ xorKey);
@@ -107,10 +123,20 @@ function encodeStrings(strings) {
 
   const decoderHeader = `
 local _decKey = ${xorKey}
+local function _bxor(a, b)
+  if bit32 and bit32.bxor then return bit32.bxor(a, b) end
+  local res, p = 0, 1
+  while a > 0 or b > 0 do
+    local ra, rb = a % 2, b % 2
+    if ra ~= rb then res = res + p end
+    a, b, p = math.floor(a / 2), math.floor(b / 2), p * 2
+  end
+  return res
+end
 local function _decStr(tbl)
   local charTbl = {}
   for i = 1, #tbl do
-    charTbl[i] = string.char(bit32.bxor(tbl[i], _decKey))
+    charTbl[i] = string.char(_bxor(tbl[i], _decKey))
   end
   return table.concat(charTbl)
 end
@@ -118,6 +144,7 @@ end
   return { encodedStrings, decoderHeader };
 }
 
+// 3. Renombrado seguro de variables de ámbito local
 function renameVariables(code) {
   const varMap = new Map();
   const regex = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g;
@@ -125,37 +152,30 @@ function renameVariables(code) {
 
   while ((match = regex.exec(code)) !== null) {
     const varName = match[1];
-    if (!varMap.has(varName) && !RESERVED.has(varName)) {
+    if (!varMap.has(varName) && !RESERVED.has(varName) && !varName.startsWith("__STR_")) {
       varMap.set(varName, randomName());
     }
   }
 
   let result = code;
-  const entries = Array.from(varMap.entries()).sort((a, b) => b[0].length - a[0].length);
+  const sortedVars = Array.from(varMap.entries()).sort((a, b) => b[0].length - a[0].length);
 
-  for (const [oldName, newName] of entries) {
-    const pattern = new RegExp("\\b" + oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g");
+  for (const [oldName, newName] of sortedVars) {
+    const pattern = new RegExp("(?<![.\\w])" + oldName + "(?![\\w])", "g");
     result = result.replace(pattern, newName);
   }
 
   return result;
 }
 
+// 4. Ofuscación segura de constantes numéricas
 function obfuscateNumbers(code) {
-  return code.replace(/\b([1-9]\d{1,5})\b/g, (match, num) => {
+  return code.replace(/(?<!__STR_\d*)(?<!\w)\b([1-9]\d{0,4})\b(?!\w)/g, (match, num) => {
     const n = parseInt(num);
-    if (n < 2 || n > 100000) return num;
-    const offset = Math.floor(Math.random() * 50) + 1;
+    if (n < 2 || n > 50000) return num;
+    const offset = Math.floor(Math.random() * 30) + 5;
     return `((${n + offset} - ${offset}))`;
   });
-}
-
-function minifyCode(code) {
-  return code
-    .split("\n")
-    .map(line => line.trim())
-    .filter(line => line.length > 0)
-    .join("\n");
 }
 
 const DTC_ANTI_TAMPER_HEADER = `
@@ -179,7 +199,7 @@ end
 function obfuscate(code, level) {
   console.log(`Processing: ${code.length} bytes, Level ${level}`);
 
-  const { cleanCode, strings } = stripCommentsAndExtractStrings(code);
+  const { cleanCode, strings } = extractStringsAndStripComments(code);
   let processedCode = cleanCode;
 
   if (level >= 1) {
@@ -188,14 +208,13 @@ function obfuscate(code, level) {
 
   if (level >= 2) {
     processedCode = obfuscateNumbers(processedCode);
-    processedCode = minifyCode(processedCode);
   }
 
   const { encodedStrings, decoderHeader } = encodeStrings(strings);
 
   for (let i = 0; i < encodedStrings.length; i++) {
-    const placeholder = `__STR_PLACEHOLDER_${i}__`;
-    processedCode = processedCode.replace(placeholder, `_decStr(${encodedStrings[i]})`);
+    const placeholder = `__STR_${i}__`;
+    processedCode = processedCode.replaceAll(placeholder, `_decStr(${encodedStrings[i]})`);
   }
 
   return DTC_ANTI_TAMPER_HEADER + "\n" + decoderHeader + "\n" + processedCode;
