@@ -89,16 +89,27 @@ function stripComments(code) {
 function renameLocals(code) {
   const map = new Map();
   let c = 0;
-  const re = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)/g;
+  // Skip "local function name" — only plain locals: local a, b = ...
+  const re = /\blocal\s+(?!function\b)([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)/g;
   let m;
   while ((m = re.exec(code)) !== null) {
     const names = m[1].split(/\s*,\s*/);
     for (let ni = 0; ni < names.length; ni++) {
       const name = names[ni].trim();
-      if (name && !map.has(name) && !RESERVED.has(name)) {
-        c++;
-        map.set(name, ln() + c);
-      }
+      // skip very short / common names that often collide with properties
+      if (!name || map.has(name) || RESERVED.has(name)) continue;
+      if (name.length <= 1) continue;
+      c++;
+      map.set(name, ln() + c);
+    }
+  }
+  // Also rename: local function foo(
+  const reFn = /\blocal\s+function\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+  while ((m = reFn.exec(code)) !== null) {
+    const name = m[1];
+    if (name && !map.has(name) && !RESERVED.has(name) && name.length > 1) {
+      c++;
+      map.set(name, ln() + c);
     }
   }
   const entries = [...map.entries()].sort(function(a, b) { return b[0].length - a[0].length; });
@@ -106,13 +117,15 @@ function renameLocals(code) {
     const oldN = entries[ei][0];
     const newN = entries[ei][1];
     const escaped = oldN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    code = code.replace(new RegExp("\\b" + escaped + "\\b", "g"), newN);
+    // NEVER replace when used as property/method: .Name or :Name
+    code = code.replace(new RegExp("(?<![.\\:])\\b" + escaped + "\\b", "g"), newN);
   }
   return code;
 }
 
 function obfuscateNumbers(code) {
-  return code.replace(/\b(\d{2,5})\b/g, function(_, num) {
+  // Do not touch numbers that are part of decimals (0.5) or table indexes in weird places
+  return code.replace(/(?<![.\w])(\d{2,5})(?![.\w])/g, function(_, num) {
     const n = parseInt(num, 10);
     if (n < 12 || n > 50000) return num;
     if (Math.random() < 0.4) return "(" + (n + 7) + "-7)";
