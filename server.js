@@ -63,36 +63,46 @@ function isBrowser(req) {
 }
 
 app.get('/api/script/:id', (req, res) => {
-  // Bloquear navegadores
-  if (isBrowser(req)) {
-    return res.status(403).json({
-      error: "Endpoint bloqueado",
-      message: "Este endpoint solo puede ser usado por ejecutores autorizados. QyrexApi"
+  try {
+    // Bloquear navegadores
+    if (isBrowser(req)) {
+      return res.status(403).json({
+        error: "Endpoint bloqueado",
+        message: "Este endpoint solo puede ser usado por ejecutores autorizados. QyrexApi"
+      });
+    }
+
+    const data = loadData();
+    const script = data.scripts.find(s => s.id === req.params.id);
+    
+    if (!script) {
+      return res.status(404).set('Content-Type', 'text/plain').send("Error: Script no encontrado");
+    }
+
+    const key = req.headers['x-api-key'] || req.query.key;
+    if (!key || !data.keys.find(k => k.key === key && k.active)) {
+      return res.status(401).set('Content-Type', 'text/plain').send("Error: API Key inválida o expirada");
+    }
+
+    // Contar visita de forma segura
+    script.visits = (script.visits || 0) + 1;
+    data.totalVisits = (data.totalVisits || 0) + 1;
+    data.visits.push({
+      scriptId: script.id,
+      time: new Date().toISOString(),
+      key: key.slice(0, 8) + "..."
     });
+    if (data.visits.length > 500) data.visits = data.visits.slice(-500);
+    saveData(data);
+
+    // Asegurar que siempre devuelva texto plano puro para evitar errores de parseo JSON en Roblox
+    res.set('Content-Type', 'text/plain; charset=utf-8');
+    return res.send(script.code);
+
+  } catch (err) {
+    console.error("Error crítico en /api/script/:id ->", err);
+    return res.status(500).set('Content-Type', 'text/plain').send("Error interno del servidor al procesar el script gigante.");
   }
-
-  const data = loadData();
-  const script = data.scripts.find(s => s.id === req.params.id);
-  if (!script) return res.status(404).json({ error: "Script no encontrado" });
-
-  const key = req.headers['x-api-key'] || req.query.key;
-  if (!key || !data.keys.find(k => k.key === key && k.active)) {
-    return res.status(401).json({ error: "API Key inválida o expirada" });
-  }
-
-  // Contar visita
-  script.visits = (script.visits || 0) + 1;
-  data.totalVisits = (data.totalVisits || 0) + 1;
-  data.visits.push({
-    scriptId: script.id,
-    time: new Date().toISOString(),
-    key: key.slice(0, 8) + "..."
-  });
-  if (data.visits.length > 500) data.visits = data.visits.slice(-500);
-  saveData(data);
-
-  res.set('Content-Type', 'text/plain');
-  res.send(script.code);
 });
 
 // ====================== DASHBOARD - SCRIPTS ======================
