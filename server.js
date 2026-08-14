@@ -5,6 +5,9 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "50mb" }));
 
+// (Opcional) Si usas archivos web estáticos en una carpeta "public":
+// app.use(express.static(path.join(__dirname, "public")));
+
 const RESERVED = new Set([
   "and","break","do","else","elseif","end","false","for","function","goto","if","in",
   "local","nil","not","or","repeat","return","then","true","until","while","_G","_ENV",
@@ -24,7 +27,6 @@ function randomName(length = 12) {
   return result;
 }
 
-// 1. Extrae cadenas de texto y remueve comentarios
 function stripCommentsAndExtractStrings(code) {
   let cleanCode = "";
   let strings = [];
@@ -87,7 +89,6 @@ function stripCommentsAndExtractStrings(code) {
   return { cleanCode, strings };
 }
 
-// 2. Encriptación de Cadenas mediante Máscara XOR Dinámica
 function encodeStrings(strings) {
   const xorKey = Math.floor(Math.random() * 250) + 1;
   const encodedStrings = strings.map(s => {
@@ -117,7 +118,6 @@ end
   return { encodedStrings, decoderHeader };
 }
 
-// 3. Renombrado Léxico de Variables
 function renameVariables(code) {
   const varMap = new Map();
   const regex = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g;
@@ -141,7 +141,6 @@ function renameVariables(code) {
   return result;
 }
 
-// 4. Ofuscación de Constantes Numéricas
 function obfuscateNumbers(code) {
   return code.replace(/\b([1-9]\d{1,5})\b/g, (match, num) => {
     const n = parseInt(num);
@@ -159,7 +158,6 @@ function minifyCode(code) {
     .join("\n");
 }
 
-// Módulo Anti-Tamper DTC integrado
 const DTC_ANTI_TAMPER_HEADER = `
 local function _dtc_check()
 	if _G.lune ~= nil or _G.lute ~= nil or _G.wally ~= nil or _G.rojo ~= nil or _G.selene ~= nil or _G.darklua ~= nil then return true end
@@ -200,10 +198,17 @@ function obfuscate(code, level) {
     processedCode = processedCode.replace(placeholder, `_decStr(${encodedStrings[i]})`);
   }
 
-  // Ensamblado final con capas de seguridad
-  const fullObfuscatedScript = DTC_ANTI_TAMPER_HEADER + "\n" + decoderHeader + "\n" + processedCode;
-  return fullObfuscatedScript;
+  return DTC_ANTI_TAMPER_HEADER + "\n" + decoderHeader + "\n" + processedCode;
 }
+
+// Ruta raíz (Maneja GET /)
+app.get("/", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "Obfuscator Engine",
+    version: "v3-pro-antitamper"
+  });
+});
 
 app.post("/api/obfuscate", (req, res) => {
   try {
