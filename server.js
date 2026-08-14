@@ -1,134 +1,201 @@
-const express = require('express');
-const cors = require('cors');
-const rateLimit = require('express-rate-limit');
-const path = require('path');
-const crypto = require('crypto');
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QyrexObf</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 20px;
+  background: #1a1a1a;
+  color: #fff;
+  font-family: Consolas, monospace;
+}
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+h1 {
+  text-align: center;
+  margin-top: 0;
+  color: #0ff;
+}
+.toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+select, button {
+  padding: 8px 15px;
+  background: #333;
+  color: #fff;
+  border: 1px solid #555;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+}
+button:hover { background: #444; }
+button:disabled { opacity: 0.5; cursor: wait; }
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #444;
+  background: #222;
+}
+.panel-title {
+  padding: 10px;
+  background: #333;
+  border-bottom: 1px solid #444;
+  font-weight: bold;
+}
+textarea {
+  flex: 1;
+  padding: 10px;
+  background: #1a1a1a;
+  color: #0f0;
+  border: none;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  resize: none;
+  min-height: 400px;
+}
+.info {
+  padding: 8px;
+  background: #2a2a2a;
+  border-top: 1px solid #444;
+  font-size: 11px;
+  color: #888;
+  display: flex;
+  justify-content: space-between;
+}
+.status {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #888;
+  min-height: 20px;
+}
+.status.success { color: #0f0; }
+.status.error { color: #f00; }
+@media (max-width: 800px) {
+  .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+<div class="container">
+  <h1>QyrexObf</h1>
 
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+  <div class="toolbar">
+    <select id="level">
+      <option value="1" selected>Level 1 - Rename (Recomendado scripts grandes)</option>
+      <option value="2">Level 2 - Rename + Strings</option>
+    </select>
+    <button onclick="doObfuscate()">OBFUSCATE</button>
+  </div>
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 300
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-title">INPUT</div>
+      <textarea id="input" placeholder="Pega tu script aquí..."></textarea>
+      <div class="info">
+        <span id="inputInfo">0 bytes</span>
+        <button onclick="clearInput()" style="padding: 3px 8px; font-size: 11px;">Clear</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">OUTPUT (1 línea)</div>
+      <textarea id="output" readonly placeholder="Resultado en 1 línea..."></textarea>
+      <div class="info">
+        <span id="outputInfo">0 bytes</span>
+        <button onclick="copyOutput()" style="padding: 3px 8px; font-size: 11px;">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="status" id="status">Ready</div>
+</div>
+
+<script>
+const input = document.getElementById('input');
+const output = document.getElementById('output');
+const inputInfo = document.getElementById('inputInfo');
+const outputInfo = document.getElementById('outputInfo');
+const status = document.getElementById('status');
+
+input.addEventListener('input', () => {
+  inputInfo.textContent = input.value.length + ' bytes';
 });
-app.use('/api/', limiter);
 
-// ====================== MOTOR DE OFUSCACIÓN REAL (SIN BASE64) ======================
-function obfuscateLuaCode(code, options = {}) {
-  const level = options.level || 2;
-  const renameVars = options.renameVars !== false;
-  const encryptStrings = options.encryptStrings !== false;
-  const antiTamper = options.antiTamper !== false;
+function doObfuscate() {
+  if (!input.value.trim()) {
+    status.textContent = 'Error: Pega un script primero';
+    status.className = 'status error';
+    return;
+  }
 
-  // 1. Limpieza de comentarios y espacios innecesarios
-  let cleanCode = code.replace(/--\[\[[\s\S]*?\]\]/g, '').replace(/--.*$/gm, '');
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
 
-  // Diccionario para renombrado de variables locales si está activo
-  let varMap = {};
-  if (renameVars) {
-    const varMatches = cleanCode.match(/\b(?:local\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g);
-    if (varMatches) {
-      varMatches.forEach(match => {
-        const parts = match.replace('local', '').trim().split('=')[0].trim();
-        if (!['if', 'then', 'else', 'elseif', 'end', 'do', 'while', 'repeat', 'until', 'for', 'in', 'function', 'return', 'and', 'or', 'not', 'true', 'false', 'nil'].includes(parts)) {
-          if (!varMap[parts]) {
-            varMap[parts] = '_q' + crypto.randomBytes(3).toString('hex');
-          }
-        }
-      });
+  const level = document.getElementById('level').value;
+
+  fetch('/api/obfuscate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      code: input.value,
+      level: parseInt(level)
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      output.value = data.code;
+      outputInfo.textContent = data.outputSize + ' bytes';
+      status.textContent = '✓ Listo (1 línea) - Protect by QyrexObf';
+      status.className = 'status success';
+    } else {
+      status.textContent = 'Error: ' + data.error;
+      status.className = 'status error';
     }
-
-    // Aplicar reemplazo seguro de variables detectadas
-    for (const [orig, gen] of Object.entries(varMap)) {
-      const regex = new RegExp(`\\b${orig}\\b`, 'g');
-      cleanCode = cleanCode.replace(regex, gen);
-    }
-  }
-
-  // 2. Cifrado de cadenas por XOR de bytes reales (sin Base64)
-  if (encryptStrings) {
-    cleanCode = cleanCode.replace(/"([^"\\]*(?:\\.[^"\\]*)*)"/g, (match, strContent) => {
-      const xorKey = Math.floor(Math.random() * 200) + 1;
-      const bytes = [];
-      for (let i = 0; i < strContent.length; i++) {
-        bytes.push(strContent.charCodeAt(i) ^ xorKey);
-      }
-      return `(function() local t={${bytes.join(',')}} local s="" for i=1,#t do s=s..string.char(t[i]~=${xorKey}) end return s end)()`;
-    });
-  }
-
-  // 3. Generación del bloque final de protección (--protect)
-  let antiTamperBlock = '';
-  if (antiTamper) {
-    antiTamperBlock = `
---protect
-local function _chk()
-    if not getgenv and not syn and not PROTOSPLIT then
-        -- Entorno estándar controlado
-    end
-end
-_chk();
-`;
-  } else {
-    antiTamperBlock = '\n--protect\n';
-  }
-
-  const finalObfuscated = `${antiTamperBlock}\n-- QyrexObf Engine v2.5\n(function()\n${cleanCode}\n)();`;
-
-  return {
-    code: finalObfuscated,
-    compressionRatio: (Math.random() * 50 + 130).toFixed(0) + '%',
-    level: level
-  };
+  })
+  .catch(e => {
+    status.textContent = 'Error: ' + e.message;
+    status.className = 'status error';
+  })
+  .finally(() => {
+    btn.disabled = false;
+    btn.textContent = 'OBFUSCATE';
+  });
 }
 
-// ====================== ENDPOINT DE OFUSCACIÓN ======================
-app.post('/api/obfuscate', (req, res) => {
-  try {
-    const { code, level, antiTamper, encryptStrings, renameVars, vmProtect, preset } = req.body;
+function copyOutput() {
+  if (!output.value) return;
+  navigator.clipboard.writeText(output.value).then(() => {
+    status.textContent = '✓ Copiado';
+    status.className = 'status success';
+  });
+}
 
-    if (!code) {
-      return res.status(400).json({
-        success: false,
-        error: "No se proporcionó ningún código para ofuscar."
-      });
-    }
+function clearInput() {
+  input.value = '';
+  inputInfo.textContent = '0 bytes';
+}
+</script>
 
-    const result = obfuscateLuaCode(code, {
-      level,
-      antiTamper,
-      encryptStrings,
-      renameVars,
-      vmProtect,
-      preset
-    });
-
-    return res.json({
-      success: true,
-      code: result.code,
-      compressionRatio: result.compressionRatio,
-      level: result.level,
-      message: "Script ofuscado correctamente."
-    });
-
-  } catch (err) {
-    console.error("Error en /api/obfuscate:", err);
-    return res.status(500).json({
-      success: false,
-      error: "Error interno del servidor al procesar el script."
-    });
-  }
-});
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.listen(PORT, () => {
-  console.log(`QyrexObf Servidor corriendo en puerto ${PORT}`);
-});
+</body>
+</html>
