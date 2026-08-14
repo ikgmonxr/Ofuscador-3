@@ -12,7 +12,12 @@ const RESERVED = new Set([
   "TweenInfo","task","wait","spawn","delay","tick","time","os","math","string","table",
   "pairs","ipairs","next","type","typeof","print","warn","error","pcall","xpcall","select",
   "unpack","rawget","rawset","rawequal","setmetatable","getmetatable","coroutine","debug",
-  "utf8","bit32","getgenv","setgenv","hookmetamethod","checkcaller","Drawing"
+  "utf8","bit32","getgenv","setgenv","hookmetamethod","checkcaller","Drawing",
+  // Miembros y servicios comunes de Roblox
+  "Players","LocalPlayer","Workspace","Lighting","ReplicatedStorage","ServerScriptService","ServerStorage",
+  "StarterGui","StarterPack","StarterPlayer","SoundService","TweenService","UserInputService",
+  "RunService","HttpService","TeleportService","MarketplaceService","ContextActionService",
+  "GuiService","Debris","CoreGui","VRService","PathfindingService","Character","Humanoid"
 ]);
 
 function randomName(length = 10) {
@@ -95,11 +100,11 @@ function stripCommentsAndExtractStrings(code) {
   return { cleanCode, strings };
 }
 
-// Restaura los textos originales
+// Restaura los textos originales usando replaceAll
 function restoreStrings(code, strings) {
   for (let i = 0; i < strings.length; i++) {
     const placeholder = `__STR_PLACEHOLDER_${i}__`;
-    code = code.replace(placeholder, strings[i]);
+    code = code.replaceAll(placeholder, strings[i]);
   }
   return code;
 }
@@ -118,7 +123,7 @@ function renameVariables(code) {
     }
   }
 
-  // Reemplazar variables (ordenadas por longitud para evitar remplazos parciales)
+  // Reemplazar variables (ordenadas por longitud para evitar reemplazos parciales)
   let result = code;
   const entries = Array.from(varMap.entries()).sort((a, b) => b[0].length - a[0].length);
 
@@ -203,7 +208,7 @@ app.post("/api/obfuscate", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, version: "simple-v2" });
+  res.json({ ok: true, version: "simple-v3" });
 });
 
 app.get("/", (req, res) => {
