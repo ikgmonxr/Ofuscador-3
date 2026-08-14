@@ -6,16 +6,34 @@ const http = require("http");
 const path = require("path");
 
 const PORT = Number(process.env.PORT || 3000);
-const MAX_SOURCE_BYTES = 900 * 1024; // un poco más alto
+const MAX_SOURCE_BYTES = 900 * 1024;
 const indexCandidates = [
   path.join(__dirname, "index.html"),
   path.join(process.cwd(), "index.html")
 ];
 
 const luaKeywords = new Set([
-  "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto",
-  "if", "in", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
-  "continue", "export", "type",
+  "and","break","do","else","elseif","end","false","for","function","goto",
+  "if","in","local","nil","not","or","repeat","return","then","true","until","while",
+  "continue","export","type"
+]);
+
+// Nombres que NO se deben renombrar (Roblox + comunes)
+const RESERVED = new Set([
+  ...luaKeywords,
+  "game","workspace","script","plugin","shared","_G","_ENV","self",
+  "Instance","Enum","Color3","Vector3","CFrame","UDim2","UDim","Rect",
+  "TweenInfo","BrickColor","NumberSequence","ColorSequence","NumberRange",
+  "PhysicalProperties","Axes","Faces","Ray","Region3",
+  "task","wait","spawn","delay","tick","time","os","math","string","table",
+  "pairs","ipairs","next","type","typeof","print","warn","error","pcall","xpcall",
+  "select","unpack","rawget","rawset","rawequal","rawlen","setmetatable","getmetatable",
+  "coroutine","debug","utf8","bit32","buffer","vector","require",
+  "Players","RunService","UserInputService","TweenService","HttpService",
+  "ReplicatedStorage","Lighting","CoreGui","Workspace","Camera","Mouse",
+  "Humanoid","HumanoidRootPart","LocalPlayer","GetService","FindFirstChild",
+  "WaitForChild","GetChildren","GetDescendants","IsA","Clone","Destroy",
+  "Connect","Disconnect","Fire","Invoke"
 ]);
 
 function isIdentifierStart(ch) { return /[A-Za-z_]/.test(ch || ""); }
@@ -86,11 +104,20 @@ function tokenizeLua(source) {
     }
 
     const op = ["...", "..=", "==", "~=", "<=", ">=", "//", "..", "->", "+=", "-=", "*=", "/=", "%="]
-      .find(candidate => source.startsWith(candidate, i));
+      .find(c => source.startsWith(c, i));
     out.push({ type: "symbol", value: op || ch });
     i += (op || ch).length;
   }
   return out;
+}
+
+function makeUglyName(n) {
+  const chars = "IlO0oQq";
+  let s = "_";
+  for (let i = 0; i < 8; i++) {
+    s += chars[(Math.random() * chars.length) | 0];
+  }
+  return s + n.toString(36);
 }
 
 function decodeLuaShortString(raw) {
@@ -100,7 +127,7 @@ function decodeLuaShortString(raw) {
   for (let i = 1; i < raw.length - 1; i++) {
     if (raw[i] !== "\\") { result += raw[i]; continue; }
     const next = raw[++i];
-    const escapes = { a: "\x07", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v", "\\": "\\", '"': '"', "'": "'" };
+    const escapes = { a:"\x07", b:"\b", f:"\f", n:"\n", r:"\r", t:"\t", v:"\v", "\\":"\\", '"':'"', "'":"'" };
     if (Object.hasOwn(escapes, next)) { result += escapes[next]; continue; }
     if (next === "z") { while (/\s/.test(raw[i + 1] || "")) i++; continue; }
     if (next === "\n") { result += "\n"; continue; }
@@ -118,86 +145,92 @@ function decodeLuaShortString(raw) {
   return result;
 }
 
-function encodeString(raw, level, decoderName) {
+function encodeString(raw, decoderName, key) {
   const decoded = decodeLuaShortString(raw);
-  if (decoded === null || decoded.length === 0) return raw;
+  if (decoded === null || decoded.length === 0 || decoded.length > 400) return raw;
+
+  // No tocar URLs / assets
+  if (/https?:\/\//i.test(decoded) || /rbxassetid/i.test(decoded)) return raw;
+
   const bytes = [...Buffer.from(decoded, "utf8")];
-  if (bytes.length > 512) return raw; // strings largas se dejan intactas
-
-  const salt = level === 3 ? 37 : 0;
-  const encoded = bytes.map(value => salt ? String(value ^ salt) : String(value));
-  const payload = encoded.join(",");
-
-  if (!salt) return `string.char(${payload})`;
-  return `${decoderName}({${payload}})`;
+  const encoded = bytes.map((b, i) => b ^ key[i % key.length]);
+  return `${decoderName}({${encoded.join(",")}})`;
 }
 
-function encodeInteger(raw, index) {
-  if (!/^\d[\d_]*$/.test(raw)) return raw;
-  const number = Number(raw.replaceAll("_", ""));
-  if (!Number.isSafeInteger(number) || number < 0 || number > 2147483647) return raw;
-  const key = ((index * 1103515245 + 12345) >>> 0) & 0x7fffffff;
-  return `(((${number}~${key})~${key}))`;
-}
+function encodeNumber(raw) {
+  if (!/^\d+$/.test(raw)) return raw;
+  const n = Number(raw);
+  if (n < 16 || n > 9999) return raw;
 
-function render(tokens, { encryptStrings, level, decoderName }) {
-  let output = "";
-  let previous = "";
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    let current = token.value;
-
-    if (encryptStrings && token.type === "string") {
-      current = encodeString(current, level, decoderName);
-    }
-    if (level === 3 && token.type === "number") {
-      current = encodeInteger(current, index);
-    }
-
-    const needsSpace =
-      (isWordEnd(previous) && isWordStart(current)) ||
-      (previous.endsWith("-") && current.startsWith("-"));
-
-    if (needsSpace) output += " ";
-    output += current;
-    previous = current;
-  }
-  return output;
+  const r = Math.random();
+  if (r < 0.33) return `(${n + 7}-7)`;
+  if (r < 0.66) return `(${n * 2}//2)`;
+  return `((${n}~0))`;
 }
 
 function obfuscate(code, options) {
-  const level = [1, 2, 3].includes(Number(options.level)) ? Number(options.level) : 2;
+  const level = [1, 2, 3].includes(Number(options.level)) ? Number(options.level) : 3;
   const tokens = tokenizeLua(code);
 
-  const usedNames = new Set(
-    tokens.filter(t => t.type === "identifier").map(t => t.value)
-  );
+  // --- Renombrado agresivo ---
+  const renameMap = new Map();
+  let counter = 0;
 
-  const seed = crypto.createHash("sha256").update(code).digest("hex");
-  let suffixLength = 7;
-  let decoderName = `__q${seed.slice(0, suffixLength)}`;
-  while (usedNames.has(decoderName)) {
-    decoderName = `__q${seed.slice(0, ++suffixLength)}`;
+  for (const token of tokens) {
+    if (token.type === "identifier" && !RESERVED.has(token.value) && token.value.length > 1) {
+      if (!renameMap.has(token.value)) {
+        counter++;
+        renameMap.set(token.value, makeUglyName(counter));
+      }
+    }
   }
 
-  const useDecoder = Boolean(options.encryptStrings) && level === 3;
-  const body = render(tokens, {
-    encryptStrings: Boolean(options.encryptStrings),
-    level,
-    decoderName
-  });
+  // Aplicar rename
+  for (const token of tokens) {
+    if (token.type === "identifier" && renameMap.has(token.value)) {
+      token.value = renameMap.get(token.value);
+    }
+  }
 
-  const hash = crypto.createHash("sha256").update(body).digest("hex").slice(0, 16);
+  // Nombre del decoder
+  const seed = crypto.randomBytes(4).toString("hex");
+  const decoderName = "_q" + seed;
+  const key = crypto.randomBytes(4); // clave XOR
 
-  // Comentario que pediste
-  const header = `-- Protect by QyrexObf\n`;
+  // --- Render + cifrado ---
+  let body = "";
+  let prev = "";
 
-  const decoder = useDecoder
-    ? `local ${decoderName}=function(t)local r={}for i=1,#t do r[i]=string.char((t[i]~37))end return table.concat(r)end;`
-    : "";
+  for (let i = 0; i < tokens.length; i++) {
+    let cur = tokens[i].value;
+
+    if (options.encryptStrings !== false && tokens[i].type === "string") {
+      cur = encodeString(cur, decoderName, key);
+    }
+
+    if (level >= 2 && tokens[i].type === "number") {
+      cur = encodeNumber(cur);
+    }
+
+    const needSpace =
+      (isWordEnd(prev) && isWordStart(cur)) ||
+      (prev.endsWith("-") && cur.startsWith("-"));
+
+    if (needSpace) body += " ";
+    body += cur;
+    prev = cur;
+  }
+
+  // Decoder compacto
+  const keyArr = [...key].join(",");
+  const decoder = `local ${decoderName}=function(t)local k={${keyArr}}local r={}for i=1,#t do r[i]=string.char(bit32.bxor(t[i],k[(i-1)%#k+1]))end return table.concat(r)end;`;
+
+  const finalCode = `-- Protect by QyrexObf\n${decoder}${body}`;
+
+  const hash = crypto.createHash("sha256").update(finalCode).digest("hex").slice(0, 12);
 
   return {
-    code: header + decoder + body,
+    code: finalCode,
     level,
     hash
   };
@@ -214,23 +247,16 @@ function sendJson(res, status, body) {
 const server = http.createServer((req, res) => {
   if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
     const indexPath = indexCandidates.find(c => fs.existsSync(c));
-    if (!indexPath) {
-      return sendJson(res, 500, {
-        error: "Falta index.html. Ponlo en la misma carpeta que server.js."
-      });
-    }
+    if (!indexPath) return sendJson(res, 500, { error: "Falta index.html" });
     return fs.readFile(indexPath, (err, page) => {
-      if (err) return sendJson(res, 500, { error: "No se pudo leer index.html." });
-      res.writeHead(200, {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store"
-      });
+      if (err) return sendJson(res, 500, { error: "No se pudo leer index.html" });
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(page);
     });
   }
 
   if (req.method !== "POST" || req.url !== "/api/obfuscate") {
-    return sendJson(res, 404, { error: "Ruta no encontrada." });
+    return sendJson(res, 404, { error: "Ruta no encontrada" });
   }
 
   let received = 0;
@@ -238,10 +264,7 @@ const server = http.createServer((req, res) => {
 
   req.on("data", chunk => {
     received += chunk.length;
-    if (received > MAX_SOURCE_BYTES + 50 * 1024) {
-      req.destroy();
-      return;
-    }
+    if (received > MAX_SOURCE_BYTES + 60 * 1024) { req.destroy(); return; }
     parts.push(chunk);
   });
 
@@ -250,51 +273,30 @@ const server = http.createServer((req, res) => {
     try {
       body = JSON.parse(Buffer.concat(parts).toString("utf8"));
     } catch {
-      return sendJson(res, 400, { error: "JSON inválido." });
+      return sendJson(res, 400, { error: "JSON inválido" });
     }
 
-    const { code } = body || {};
+    const code = body?.code;
     if (typeof code !== "string" || !code.trim()) {
-      return sendJson(res, 400, { error: "Pega código Lua primero." });
+      return sendJson(res, 400, { error: "Pega un script primero" });
     }
-
     if (Buffer.byteLength(code, "utf8") > MAX_SOURCE_BYTES) {
-      return sendJson(res, 413, { error: "Límite de tamaño excedido (~900 KB)." });
+      return sendJson(res, 413, { error: "Script demasiado grande" });
     }
-
-    // === AQUÍ SE QUITÓ EL BLOQUEO DE APIs DE EXECUTOR ===
-    // Ya no rechaza getgenv, hookmetamethod, loadstring, etc.
 
     try {
       const result = obfuscate(code, body);
       const ratio = Math.round((result.code.length / code.length) * 100);
-
       return sendJson(res, 200, {
         ...result,
-        compressionRatio: `${ratio}%`
+        compressionRatio: ratio + "%"
       });
-    } catch (error) {
-      return sendJson(res, 500, {
-        error: "No se pudo transformar el código.",
-        detail: error.message
-      });
+    } catch (e) {
+      return sendJson(res, 500, { error: e.message || "Error al ofuscar" });
     }
   });
-
-  req.on("error", () => {
-    if (!res.headersSent) sendJson(res, 400, { error: "Solicitud interrumpida." });
-  });
-});
-
-server.on("error", error => {
-  if (error.code === "EADDRINUSE") {
-    console.error(`Puerto ${PORT} en uso. Prueba: PORT=3001 npm start`);
-  } else {
-    console.error(error);
-  }
-  process.exitCode = 1;
 });
 
 server.listen(PORT, () => {
-  console.log(`QyrexObf local: http://localhost:${PORT}`);
+  console.log(`QyrexObf Ultra: http://localhost:${PORT}`);
 });
