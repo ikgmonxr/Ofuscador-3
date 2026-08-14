@@ -1,9 +1,9 @@
 /**
- * QyrexObf - Ultra Clean (máxima compatibilidad)
- * Prioridad: que NO dé errores
+ * QyrexObf - Cifrado + Estable
  */
 const express = require("express");
 const path = require("path");
+const crypto = require("crypto");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -29,38 +29,100 @@ const RESERVED = new Set([
   "IsA","Clone","Destroy","Connect","Disconnect","Fire","Invoke","shared","plugin"
 ]);
 
-function makeName(n) {
-  const chars = "abcdefghijkmnopqrstuvwxyz";
-  let s = "_";
-  for (let i = 0; i < 6; i++) {
-    s += chars[(Math.random() * chars.length) | 0];
+function rnd(len = 5) {
+  const c = "abcdefghijkmnopqrstuvwxyz";
+  let s = "";
+  for (let i = 0; i < len; i++) s += c[(Math.random() * c.length) | 0];
+  return s;
+}
+
+function varName() {
+  return "_" + rnd(4) + rnd(3);
+}
+
+function extractStrings(code) {
+  const strings = [];
+  let out = "";
+  let i = 0;
+
+  while (i < code.length) {
+    // Long brackets [[...]]
+    if (code[i] === "[") {
+      let m = i + 1;
+      let eqs = "";
+      while (m < code.length && code[m] === "=") {
+        eqs += "=";
+        m++;
+      }
+      if (m < code.length && code[m] === "[") {
+        const endMark = "]" + eqs + "]";
+        const endIdx = code.indexOf(endMark, m + 1);
+        if (endIdx !== -1) {
+          strings.push(code.slice(i, endIdx + endMark.length));
+          out += "___S" + (strings.length - 1) + "___";
+          i = endIdx + endMark.length;
+          continue;
+        }
+      }
+    }
+
+    // "..." o '...'
+    if (code[i] === '"' || code[i] === "'") {
+      const quote = code[i];
+      let j = i + 1;
+      let str = quote;
+      while (j < code.length) {
+        if (code[j] === "\\") {
+          str += code[j];
+          if (j + 1 < code.length) {
+            str += code[j + 1];
+            j += 2;
+          } else {
+            j++;
+          }
+          continue;
+        }
+        str += code[j];
+        if (code[j] === quote) {
+          j++;
+          break;
+        }
+        j++;
+      }
+      strings.push(str);
+      out += "___S" + (strings.length - 1) + "___";
+      i = j;
+      continue;
+    }
+
+    out += code[i];
+    i++;
   }
-  return s + n;
+  return { code: out, strings };
 }
 
 function stripComments(code) {
   let result = "";
   let i = 0;
   while (i < code.length) {
-    // --[[ ... ]]
-    if (code[i] === "-" && code[i+1] === "-" && code[i+2] === "[") {
-      let m = i + 3;
-      let eqs = "";
-      while (m < code.length && code[m] === "=") {
-        eqs += "=";
-        m++;
-      }
+    if (code[i] === "-" && code[i + 1] === "-") {
+      let m = i + 2;
       if (code[m] === "[") {
-        const end = "]" + eqs + "]";
-        const idx = code.indexOf(end, m + 1);
-        if (idx !== -1) {
-          i = idx + end.length;
-          continue;
+        let eqs = "";
+        m++;
+        while (m < code.length && code[m] === "=") {
+          eqs += "=";
+          m++;
+        }
+        if (code[m] === "[") {
+          const endMark = "]" + eqs + "]";
+          const endIdx = code.indexOf(endMark, m + 1);
+          if (endIdx !== -1) {
+            i = endIdx + endMark.length;
+            continue;
+          }
         }
       }
-    }
-    // -- comentario normal
-    if (code[i] === "-" && code[i+1] === "-") {
       i += 2;
       while (i < code.length && code[i] !== "\n") i++;
       continue;
@@ -73,39 +135,88 @@ function stripComments(code) {
 
 function renameLocals(code) {
   const map = new Map();
-  let id = 0;
+  let counter = 0;
 
-  // local x
+  // local nombre
   let re = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g;
-  let m;
-  while ((m = re.exec(code)) !== null) {
-    const name = m[1];
+  let match;
+  while ((match = re.exec(code)) !== null) {
+    const name = match[1];
     if (!RESERVED.has(name) && !map.has(name) && name.length > 1) {
-      id++;
-      map.set(name, makeName(id));
+      counter++;
+      map.set(name, varName() + counter);
     }
   }
 
   // local a, b, c
   re = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)+)/g;
-  while ((m = re.exec(code)) !== null) {
-    const parts = m[1].split(/\s*,\s*/);
+  while ((match = re.exec(code)) !== null) {
+    const parts = match[1].split(/\s*,\s*/);
     for (const name of parts) {
       if (!RESERVED.has(name) && !map.has(name) && name.length > 1) {
-        id++;
-        map.set(name, makeName(id));
+        counter++;
+        map.set(name, varName() + counter);
       }
     }
   }
 
-  // Reemplazar de más largo a más corto (importante)
-  const sorted = [...map.entries()].sort((a, b) => b[0].length - a[0].length);
+  // Reemplazar de más largo a más corto
+  const entries = [...map.entries()].sort((a, b) => b[0].length - a[0].length);
   let result = code;
-  for (const [oldName, newName] of sorted) {
+  for (const [oldName, newName] of entries) {
     const regex = new RegExp("\\b" + oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g");
     result = result.replace(regex, newName);
   }
   return result;
+}
+
+function protectStrings(code, strings) {
+  const key = crypto.randomBytes(5).toString("hex");
+  const decName = varName();
+  const keyBytes = Buffer.from(key, "utf8");
+
+  // Decoder compacto
+  const decoder = `local ${decName}=function(t,k)local r={}for i=1,#t do r[i]=string.char(bit32.bxor(t[i],string.byte(k,(i-1)%#k+1)))end return table.concat(r)end `;
+
+  const rebuilt = [];
+
+  for (let i = 0; i < strings.length; i++) {
+    const raw = strings[i];
+
+    // No tocar long strings ni cosas especiales
+    if (raw.startsWith("[") || raw.length < 4) {
+      rebuilt.push(raw);
+      continue;
+    }
+
+    let content = raw.slice(1, -1);
+
+    // No cifrar URLs, assets, etc. (evita romper)
+    if (
+      content.length > 2500 ||
+      content.includes("http") ||
+      content.includes("rbxassetid") ||
+      content.includes("github") ||
+      content.includes("sirius")
+    ) {
+      rebuilt.push(raw);
+      continue;
+    }
+
+    const bytes = [];
+    for (let j = 0; j < content.length; j++) {
+      bytes.push(content.charCodeAt(j) ^ keyBytes[j % keyBytes.length]);
+    }
+
+    rebuilt.push(`${decName}({${bytes.join(",")}},"${key}")`);
+  }
+
+  let out = code;
+  for (let i = strings.length - 1; i >= 0; i--) {
+    out = out.split("___S" + i + "___").join(rebuilt[i]);
+  }
+
+  return decoder + out;
 }
 
 function toOneLine(code) {
@@ -121,34 +232,36 @@ function toOneLine(code) {
 function obfuscate(source) {
   let code = String(source || "").trim();
   if (!code) throw new Error("Script vacío");
+  if (code.length > 900000) throw new Error("Script demasiado grande");
 
-  if (code.length > 950000) {
-    throw new Error("Script demasiado grande");
-  }
+  // 1. Extraer strings
+  const extracted = extractStrings(code);
 
-  // 1. Quitar comentarios
-  code = stripComments(code);
+  // 2. Quitar comentarios
+  let processed = stripComments(extracted.code);
 
-  // 2. Renombrar variables (solo esto)
-  code = renameLocals(code);
+  // 3. Renombrar variables
+  processed = renameLocals(processed);
 
-  // 3. Una sola línea
-  code = toOneLine(code);
+  // 4. Cifrar strings
+  processed = protectStrings(processed, extracted.strings);
 
-  // Resultado limpio
-  return "-- Protect by QyrexObf\n" + code;
+  // 5. Una sola línea
+  processed = toOneLine(processed);
+
+  return "-- Protect by QyrexObf\n" + processed;
 }
 
-// ========== RUTAS ==========
+// ================== API ==================
 app.post("/api/obfuscate", (req, res) => {
   try {
-    const code = req.body && req.body.code;
+    const code = req.body?.code;
 
     if (typeof code !== "string" || !code.trim()) {
       return res.status(400).json({ error: "No se recibió ningún script." });
     }
 
-    console.log("[QyrexObf] size =", code.length);
+    console.log("[QyrexObf] size:", code.length);
 
     const result = obfuscate(code);
 
@@ -159,13 +272,13 @@ app.post("/api/obfuscate", (req, res) => {
       outputSize: result.length
     });
   } catch (err) {
-    console.error(err);
+    console.error("[Error]", err.message);
     res.status(500).json({ error: err.message || "Error" });
   }
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, name: "QyrexObf Clean" });
+  res.json({ ok: true, name: "QyrexObf", mode: "encrypted-clean" });
 });
 
 app.get("/", (req, res) => {
@@ -178,6 +291,6 @@ module.exports = app;
 
 if (require.main === module) {
   app.listen(PORT, "0.0.0.0", () => {
-    console.log("QyrexObf Clean corriendo en puerto " + PORT);
+    console.log("QyrexObf corriendo en puerto " + PORT);
   });
 }
