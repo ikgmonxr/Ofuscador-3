@@ -12,16 +12,11 @@ const RESERVED = new Set([
   "TweenInfo","task","wait","spawn","delay","tick","time","os","math","string","table",
   "pairs","ipairs","next","type","typeof","print","warn","error","pcall","xpcall","select",
   "unpack","rawget","rawset","rawequal","setmetatable","getmetatable","coroutine","debug",
-  "utf8","bit32","getgenv","setgenv","hookmetamethod","checkcaller","Drawing",
-  // Miembros y servicios comunes de Roblox
-  "Players","LocalPlayer","Workspace","Lighting","ReplicatedStorage","ServerScriptService","ServerStorage",
-  "StarterGui","StarterPack","StarterPlayer","SoundService","TweenService","UserInputService",
-  "RunService","HttpService","TeleportService","MarketplaceService","ContextActionService",
-  "GuiService","Debris","CoreGui","VRService","PathfindingService","Character","Humanoid"
+  "utf8","bit32","getgenv","setgenv","hookmetamethod","checkcaller","Drawing"
 ]);
 
-function randomName(length = 10) {
-  let result = "_";
+function randomName(length = 12) {
+  let result = "_0x";
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   for (let i = 0; i < length; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -29,14 +24,13 @@ function randomName(length = 10) {
   return result;
 }
 
-// Extrae cadenas de texto para protegerlas y elimina comentarios
+// 1. Extrae cadenas de texto y remueve comentarios
 function stripCommentsAndExtractStrings(code) {
   let cleanCode = "";
   let strings = [];
   let i = 0;
 
   while (i < code.length) {
-    // Cadenas de texto simples o dobles
     if (code[i] === '"' || code[i] === "'") {
       const quote = code[i];
       let strVal = quote;
@@ -52,9 +46,7 @@ function stripCommentsAndExtractStrings(code) {
       const placeholder = `__STR_PLACEHOLDER_${strings.length}__`;
       strings.push(strVal);
       cleanCode += placeholder;
-    }
-    // Cadenas multilínea [[...]]
-    else if (code.substr(i, 2) === "[[") {
+    } else if (code.substr(i, 2) === "[[") {
       let strVal = "[[";
       i += 2;
       while (i < code.length) {
@@ -69,9 +61,7 @@ function stripCommentsAndExtractStrings(code) {
       const placeholder = `__STR_PLACEHOLDER_${strings.length}__`;
       strings.push(strVal);
       cleanCode += placeholder;
-    }
-    // Comentario multilínea --[[...]]
-    else if (code.substr(i, 4) === "--[[") {
+    } else if (code.substr(i, 4) === "--[[") {
       i += 4;
       while (i < code.length - 1) {
         if (code.substr(i, 2) === "]]") {
@@ -80,9 +70,7 @@ function stripCommentsAndExtractStrings(code) {
         }
         i++;
       }
-    }
-    // Comentario de una línea --...
-    else if (code.substr(i, 2) === "--") {
+    } else if (code.substr(i, 2) === "--") {
       while (i < code.length && code[i] !== "\n") {
         i++;
       }
@@ -90,8 +78,7 @@ function stripCommentsAndExtractStrings(code) {
         cleanCode += "\n";
         i++;
       }
-    }
-    else {
+    } else {
       cleanCode += code[i];
       i++;
     }
@@ -100,19 +87,39 @@ function stripCommentsAndExtractStrings(code) {
   return { cleanCode, strings };
 }
 
-// Restaura los textos originales usando replaceAll
-function restoreStrings(code, strings) {
-  for (let i = 0; i < strings.length; i++) {
-    const placeholder = `__STR_PLACEHOLDER_${i}__`;
-    code = code.replaceAll(placeholder, strings[i]);
-  }
-  return code;
+// 2. Encriptación de Cadenas mediante Máscara XOR Dinámica
+function encodeStrings(strings) {
+  const xorKey = Math.floor(Math.random() * 250) + 1;
+  const encodedStrings = strings.map(s => {
+    let raw = s;
+    if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+      raw = raw.slice(1, -1);
+    } else if (raw.startsWith("[[") && raw.endsWith("]]")) {
+      raw = raw.slice(2, -2);
+    }
+    const bytes = [];
+    for (let i = 0; i < raw.length; i++) {
+      bytes.push(raw.charCodeAt(i) ^ xorKey);
+    }
+    return `{${bytes.join(",")}}`;
+  });
+
+  const decoderHeader = `
+local _decKey = ${xorKey}
+local function _decStr(tbl)
+  local charTbl = {}
+  for i = 1, #tbl do
+    charTbl[i] = string.char(bit32.bxor(tbl[i], _decKey))
+  end
+  return table.concat(charTbl)
+end
+`;
+  return { encodedStrings, decoderHeader };
 }
 
+// 3. Renombrado Léxico de Variables
 function renameVariables(code) {
   const varMap = new Map();
-
-  // Buscar declaraciones locales
   const regex = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g;
   let match;
 
@@ -123,7 +130,6 @@ function renameVariables(code) {
     }
   }
 
-  // Reemplazar variables (ordenadas por longitud para evitar reemplazos parciales)
   let result = code;
   const entries = Array.from(varMap.entries()).sort((a, b) => b[0].length - a[0].length);
 
@@ -135,14 +141,13 @@ function renameVariables(code) {
   return result;
 }
 
+// 4. Ofuscación de Constantes Numéricas
 function obfuscateNumbers(code) {
   return code.replace(/\b([1-9]\d{1,5})\b/g, (match, num) => {
     const n = parseInt(num);
     if (n < 2 || n > 100000) return num;
-    if (Math.random() < 0.5) {
-      return `(${n + 1}-1)`;
-    }
-    return num;
+    const offset = Math.floor(Math.random() * 50) + 1;
+    return `((${n + offset} - ${offset}))`;
   });
 }
 
@@ -154,28 +159,50 @@ function minifyCode(code) {
     .join("\n");
 }
 
+// Módulo Anti-Tamper DTC integrado
+const DTC_ANTI_TAMPER_HEADER = `
+local function _dtc_check()
+	if _G.lune ~= nil or _G.lute ~= nil or _G.wally ~= nil or _G.rojo ~= nil or _G.selene ~= nil or _G.darklua ~= nil then return true end
+	if _G.process and (_G.process.env or _G.process.platform or _G.process.argv) then return true end
+	if _G.window ~= nil or _G.document ~= nil or _G.globalThis ~= nil then return true end
+	if _G.game == nil or _G.workspace == nil then return true end
+	if not pcall(function() return game:GetService("HttpService") end) then return true end
+	local s, e = pcall(function() return Instance.new("Part").Name end)
+	if not s or e ~= "Part" then return true end
+	if getrawmetatable and getrawmetatable(game).__metatable ~= getmetatable(game) then return true end
+	return false
+end
+if _dtc_check() then
+	print("Security Violation: Unauthorized Runtime Detected.")
+	return
+end
+`;
+
 function obfuscate(code, level) {
   console.log(`Processing: ${code.length} bytes, Level ${level}`);
 
-  // 1. Ocultar cadenas de texto y limpiar comentarios
   const { cleanCode, strings } = stripCommentsAndExtractStrings(code);
   let processedCode = cleanCode;
 
-  // 2. Renombrar variables
   if (level >= 1) {
     processedCode = renameVariables(processedCode);
   }
 
-  // 3. Ofuscar números y minificar
   if (level >= 2) {
     processedCode = obfuscateNumbers(processedCode);
     processedCode = minifyCode(processedCode);
   }
 
-  // 4. Restaurar las cadenas de texto originales
-  processedCode = restoreStrings(processedCode, strings);
+  const { encodedStrings, decoderHeader } = encodeStrings(strings);
 
-  return processedCode;
+  for (let i = 0; i < encodedStrings.length; i++) {
+    const placeholder = `__STR_PLACEHOLDER_${i}__`;
+    processedCode = processedCode.replace(placeholder, `_decStr(${encodedStrings[i]})`);
+  }
+
+  // Ensamblado final con capas de seguridad
+  const fullObfuscatedScript = DTC_ANTI_TAMPER_HEADER + "\n" + decoderHeader + "\n" + processedCode;
+  return fullObfuscatedScript;
 }
 
 app.post("/api/obfuscate", (req, res) => {
@@ -208,19 +235,9 @@ app.post("/api/obfuscate", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, version: "simple-v3" });
+  res.json({ ok: true, version: "v3-pro-antitamper" });
 });
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`[OBFUSCATOR PRO ENGINE] Active on port ${PORT}`);
 });
-
-app.use(express.static(path.join(__dirname, "public")));
-
-module.exports = app;
-
-if (require.main === module) {
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[OBFUSCATOR] Port ${PORT}`);
-  });
-}
