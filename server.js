@@ -47,17 +47,11 @@ function saveData(data) {
 // ====================== API DE SCRIPTS (protegida) ======================
 function isBrowser(req) {
   const ua = (req.headers['user-agent'] || '').toLowerCase();
-  
-  // Excepción estricta: Si el request viene explícitamente de Roblox o se identifica como cliente de juego, ignoramos el bloqueo de navegador
-  if (ua.includes('roblox') || ua.includes('synapse') || ua.includes('scriptware') || ua.includes('electron') || ua.includes('fluxus')) {
-    return false;
-  }
-
   return ua.includes('mozilla') || ua.includes('chrome') || ua.includes('safari') || ua.includes('firefox') || ua.includes('edge');
 }
 
 app.get('/api/script/:id', (req, res) => {
-  // Bloquear navegadores web comunes para proteger el script
+  // Bloquear navegadores
   if (isBrowser(req)) {
     return res.status(403).json({
       error: "Endpoint bloqueado",
