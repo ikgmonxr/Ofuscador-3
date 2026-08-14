@@ -1,6 +1,6 @@
 /**
- * IKGONAVI Obfuscator v2 — Big Scripts + Anti-Tamper fusion + Keyforge/Luarph Engine
- * Fixed: string protection, safer rename, Luau-safe ops, optional anti-tamper inject
+ * QyrexObf - Single Line Obfuscator
+ * Solo 1 nivel (el más estable) + todo en 1 línea
  */
 const express = require("express");
 const path = require("path");
@@ -8,7 +8,7 @@ const crypto = require("crypto");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: "12mb" }));
+app.use(express.json({ limit: "15mb" }));
 
 const RESERVED = new Set([
   "and","break","do","else","elseif","end","false","for","function",
@@ -30,8 +30,7 @@ const RESERVED = new Set([
   "IsA","Clone","Destroy","Connect","Disconnect","Fire","Invoke"
 ]);
 
-function rnd(n) {
-  n = n || 6;
+function rnd(n = 6) {
   const a = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const b = a + "0123456789";
   let s = a[(Math.random() * 52) | 0];
@@ -41,7 +40,7 @@ function rnd(n) {
 
 function ln() {
   const p = "abcdefghijkmnopqrstuvwxyz";
-  return "_" + p[(Math.random() * p.length) | 0] + rnd(6);
+  return "_" + p[(Math.random() * p.length) | 0] + rnd(5);
 }
 
 function extractStrings(code) {
@@ -60,10 +59,8 @@ function extractStrings(code) {
         const endMark = "]" + eqs + "]";
         const endIdx = code.indexOf(endMark, m + 1);
         if (endIdx !== -1) {
-          const full = code.slice(i, endIdx + endMark.length);
-          const id = strings.length;
-          strings.push(full);
-          out += "___S" + id + "___";
+          strings.push(code.slice(i, endIdx + endMark.length));
+          out += "___S" + (strings.length - 1) + "___";
           i = endIdx + endMark.length;
           continue;
         }
@@ -89,9 +86,8 @@ function extractStrings(code) {
         }
         j++;
       }
-      const id = strings.length;
       strings.push(s);
-      out += "___S" + id + "___";
+      out += "___S" + (strings.length - 1) + "___";
       i = j;
       continue;
     }
@@ -136,25 +132,28 @@ function stripComments(code) {
 function renameLocals(code) {
   const map = new Map();
   let counter = 0;
+
   const regex = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g;
   let match;
   while ((match = regex.exec(code)) !== null) {
     const name = match[1];
     if (!map.has(name) && !RESERVED.has(name) && name.length > 1) {
       counter++;
-      map.set(name, ln() + String(counter));
+      map.set(name, ln() + counter);
     }
   }
+
   const multi = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)+)/g;
   while ((match = multi.exec(code)) !== null) {
     const parts = match[1].split(/\s*,\s*/);
     for (const name of parts) {
       if (!map.has(name) && !RESERVED.has(name) && name.length > 1) {
         counter++;
-        map.set(name, ln() + String(counter));
+        map.set(name, ln() + counter);
       }
     }
   }
+
   const entries = [...map.entries()].sort((a, b) => b[0].length - a[0].length);
   let result = code;
   for (const [oldName, newName] of entries) {
@@ -164,78 +163,24 @@ function renameLocals(code) {
   return result;
 }
 
-function obfuscateNumbers(code) {
-  return code.replace(/\b(\d{2,4})\b/g, (match, num) => {
-    const n = parseInt(num, 10);
-    // skip asset-like and small constants used by UI
-    if (n < 16 || n > 9000) return num;
-    const r = Math.random();
-    if (r < 0.25) return "(" + (n + 3) + "-3)";
-    if (r < 0.45) return "(" + (n - 2) + "+2)";
-    if (r < 0.6) return "(" + n * 2 + "//2)";
-    return num;
-  });
-}
-
-function injectJunk(code) {
-  const lines = code.split("\n");
-  const result = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    result.push(line);
-    const t = line.trim();
-    const unsafe =
-      /function\s*$/.test(t) ||
-      /then\s*$/.test(t) ||
-      /else\s*$/.test(t) ||
-      /do\s*$/.test(t) ||
-      /repeat\s*$/.test(t) ||
-      /,\s*$/.test(t) ||
-      /\(\s*$/.test(t) ||
-      /\{\s*$/.test(t) ||
-      /=\s*$/.test(t) ||
-      /\.\.\s*$/.test(t) ||
-      /and\s*$/.test(t) ||
-      /or\s*$/.test(t);
-    if (t.length > 20 && !unsafe && Math.random() > 0.82) {
-      result.push("local " + ln() + "=(nil);");
-    }
-  }
-  return result.join("\n");
-}
-
-function encryptStrings(code, strings, level) {
-  if (level < 2) {
-    let out = code;
-    for (let i = strings.length - 1; i >= 0; i--) {
-      out = out.split("___S" + i + "___").join(strings[i]);
-    }
-    return { code: out, decoder: "" };
-  }
-
-  const key = crypto.randomBytes(6).toString("hex");
+function encryptStrings(code, strings) {
+  const key = crypto.randomBytes(5).toString("hex");
   const decName = ln();
   const keyBytes = Buffer.from(key, "utf8");
 
-  let decoder =
-    "local " +
-    decName +
-    "=function(t,k)\n" +
-    "local r={}\n" +
-    "for i=1,#t do\n" +
-    "local b=string.byte(k,(i-1)%#k+1)\n" +
-    "r[i]=string.char(bit32.bxor(t[i],b))\n" +
-    "end\n" +
-    "return table.concat(r)\n" +
-    "end\n";
+  // Decoder ya en 1 línea
+  let decoder = `local ${decName}=function(t,k)local r={}for i=1,#t do local b=string.byte(k,(i-1)%#k+1)r[i]=string.char(bit32.bxor(t[i],b))end return table.concat(r)end `;
 
   const rebuilt = [];
   for (let i = 0; i < strings.length; i++) {
     const raw = strings[i];
-    if (raw.startsWith("[") || raw.length < 4) {
+
+    // No tocar long strings, URLs, asset ids, etc.
+    if (raw.startsWith("[") || raw.length < 5) {
       rebuilt.push(raw);
       continue;
     }
+
     let content = raw.slice(1, -1);
     try {
       content = content
@@ -247,14 +192,12 @@ function encryptStrings(code, strings, level) {
         .replace(/\\"/g, '"');
     } catch (_) {}
 
-    // Never encrypt URLs, asset ids, flags, or huge blobs (keeps Rayfield/HttpGet alive)
     if (
-      content.length > 4000 ||
+      content.length > 3000 ||
       /^rbxassetid:\/\//i.test(content) ||
       /^https?:\/\//i.test(content) ||
       /sirius\.menu/i.test(content) ||
-      /raw\.githubusercontent/i.test(content) ||
-      /^[A-Za-z0-9_\-]{3,40}$/.test(content) && content.length < 24 // likely Flag names
+      /raw\.githubusercontent/i.test(content)
     ) {
       rebuilt.push(raw);
       continue;
@@ -264,205 +207,82 @@ function encryptStrings(code, strings, level) {
     for (let j = 0; j < content.length; j++) {
       encrypted.push(content.charCodeAt(j) ^ keyBytes[j % keyBytes.length]);
     }
-    const bytesStr = "{" + encrypted.join(",") + "}";
-    rebuilt.push(decName + "(" + bytesStr + ',"' + key + '")');
+    rebuilt.push(`${decName}({${encrypted.join(",")}},"${key}")`);
   }
 
   let out = code;
   for (let i = strings.length - 1; i >= 0; i--) {
     out = out.split("___S" + i + "___").join(rebuilt[i]);
   }
-  return { code: out, decoder };
+  return decoder + out;
 }
 
-function minify(code) {
+function toOneLine(code) {
   return code
-    .split("\n")
-    .map((l) => l.replace(/[ \t]+$/g, ""))
-    .filter((line, i, arr) => {
-      if (line.trim() === "" && i > 0 && arr[i - 1].trim() === "") return false;
-      return true;
-    })
-    .join("\n")
+    .replace(/--\[\[[\s\S]*?\]\]/g, "")
+    .replace(/--[^\n]*/g, "")
+    .replace(/\r\n|\r|\n/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*([=+\-*/%<>~^#(){},;.])\s*/g, "$1")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
-function buildAntiTamper(mode) {
-  const hard = mode === "hard";
-  const stop = hard
-    ? 'error("IKGONAVI: environment blocked",0)'
-    : 'pcall(function() local p=game:GetService("Players").LocalPlayer if p then p:Kick("Security") end end)';
-
-  return `
--- IKGONAVI Anti-Tamper v2 (Aqua fingerprints + Keyforge + Luraph + Catph VM)
-do
-	local function __ikg_fail(r)
-		` + stop + `
-	end
-
-	-- Keyforge & Luraph Anti-Beautify / Function Trap Engine Integrations
-	local function __keyforge_luraph_check()
-		local p = { [1642754488]=25, [3105969070]=50, [48342080]=50, [793184576]=25 }
-		local q, r = getfenv(), next
-		local t = nil
-		while true do
-			t, Value = r(q, t)
-			if t == nil then break end
-			if type(t) == 'string' and #t < 20 then
-				local u, v, w, x = 2166136261, { string.byte(t, 1, -1) }, r
-				while true do
-					local y
-					x, y = r(v, x)
-					if x == nil then break end
-					local z = bit32.bxor(u, y)
-					if z >= 134217728 then
-						local A = z % 65536
-						local B, C = (z - A) / 65536, A * 403
-						u = (B * 403 + A * 256) % 65536 * 65536 + C
-					else
-						u = z * 16777619 % 4294967296
-					end
-				end
-			end
-		end
-	end
-	pcall(__keyforge_luraph_check)
-
-	-- primitives
-	if type(string)~="table" or type(math)~="table" or type(table)~="table" then __ikg_fail("prim") end
-	if type(string.byte)~="function" or string.byte("A")~=65 then __ikg_fail("byte") end
-	if type(math.floor)~="function" or math.floor(3.9)~=3 or math.floor(math.pi)~=3 then __ikg_fail("floor") end
-	if bit32 and type(bit32.bxor)=="function" and bit32.bxor(85,170)~=255 then __ikg_fail("bxor") end
-	-- game identity
-	if type(game)==type({}) then __ikg_fail("game_table") end
-	if type(typeof)=="function" and typeof(game)=="table" then __ikg_fail("typeof_game") end
-	do local ok,mt=pcall(getmetatable,game) if ok and type(mt)==type({}) then __ikg_fail("mt_game") end end
-	-- sandbox fingerprints (Aqua)
-	local ZERO="00000000-0000-0000-0000-000000000000"
-	local okJ,jobId=pcall(function() return game.JobId end)
-	if okJ and jobId==ZERO then __ikg_fail("jobid") end
-	local okP,placeId=pcall(function() return game.PlaceId end)
-	if okP and placeId==8916037983 then __ikg_fail("place") end
-	local okG,gameId=pcall(function() return game.GameId end)
-	if okG and gameId==8916037983 then __ikg_fail("gameid") end
-	local okPl,Players=pcall(function() return game:GetService("Players") end)
-	if not okPl or not Players then __ikg_fail("players") end
-	local LP=Players and Players.LocalPlayer
-	if not LP then __ikg_fail("lp") end
-	if LP then
-		local okU,uid=pcall(function() return LP.UserId end)
-		if okU and uid==123456789 then __ikg_fail("uid") end
-		local okN,nm=pcall(function() return LP.Name end)
-		if okN and nm=="vole7vin" then __ikg_fail("name") end
-	end
-	-- Stats / Data Ping (client only)
-	local okS,Stats=pcall(function() return game:GetService("Stats") end)
-	if okS and Stats then
-		local okNet,Net=pcall(function() return Stats.Network end)
-		if okNet and Net then
-			local okSSI,SSI=pcall(function() return Net.ServerStatsItem end)
-			if okSSI and SSI then
-				local okDP,DP=pcall(function() return SSI["Data Ping"] end)
-				if okDP and DP then
-					local okPV,pv=pcall(function() return DP:GetValue() end)
-					if okPV and (pv==nil or pv=="" or tonumber(pv)==0 or math.floor(tonumber(pv) or 0)==0) then
-						__ikg_fail("pingval")
-					end
-				end
-			end
-		end
-	end
-	-- CoreGui presence (soft: only if accessible)
-	pcall(function()
-		local CG=game:GetService("CoreGui")
-		if CG and not CG:FindFirstChild("RobloxGui") then __ikg_fail("robloxgui") end
-	end)
-	-- offline tool / browser / node fingerprints (anti-sandbox everything, condensed)
-	if _G.lune or _G.lute or _G.wally or _G.rojo or _G.selene or _G.darklua then __ikg_fail("tool") end
-	if _G.process and (_G.process.env or _G.process.platform or _G.process.exit) then __ikg_fail("process") end
-	if _G.window or _G.document or _G.navigator or _G.localStorage then __ikg_fail("browser") end
-	if _G.Buffer and _G.Buffer.from then __ikg_fail("nodebuf") end
-	if _G.__dirname or _G.__filename then __ikg_fail("nodepath") end
-	pcall(function()
-		if package and type(package)=="table" and (rawget(package,"lune") or rawget(package,"lute") or rawget(package,"wally")) then
-			__ikg_fail("package")
-		end
-	end)
-end
-`.trim();
-}
-
-function obfuscateLua(source, level, options) {
-  options = options || {};
+function obfuscate(source) {
   let code = String(source || "").trim();
   if (!code) throw new Error("Empty script");
 
+  if (code.length > 900000) {
+    throw new Error("Script demasiado grande (máximo ~900KB)");
+  }
+
+  // 1. Extraer strings
   const extracted = extractStrings(code);
   code = stripComments(extracted.code);
-  const strings = extracted.strings;
 
-  if (level >= 1) code = renameLocals(code);
-  if (level >= 2) {
-    code = obfuscateNumbers(code);
-    code = injectJunk(code);
-  }
+  // 2. Renombrar variables locales
+  code = renameLocals(code);
 
-  const prot = encryptStrings(code, strings, level);
-  code = prot.code;
-  const decoder = prot.decoder || "";
-  code = minify(code);
+  // 3. Proteger strings + decoder
+  code = encryptStrings(code, extracted.strings);
 
-  let result = "-- Protected by IKGONAVI Obfuscator v2 (Keyforge + Luarph Engine)\n";
-  if (options.antiTamper) {
-    result += buildAntiTamper(options.antiTamperMode || "soft") + "\n";
-  }
-  if (level >= 2 && decoder) result += decoder + "\n";
-  result += code;
-  return result;
+  // 4. Todo a 1 sola línea
+  code = toOneLine(code);
+
+  // 5. Comentario final
+  return "-- Protect by QyrexObf " + code;
 }
 
-app.post("/api/obfuscate", function (req, res) {
+// ========== API ==========
+app.post("/api/obfuscate", (req, res) => {
   try {
-    const code = req.body && req.body.code;
-    const level = req.body && req.body.level;
-    const antiTamper = !!(req.body && req.body.antiTamper);
-    const antiTamperMode = (req.body && req.body.antiTamperMode) || "soft";
+    const code = req.body?.code;
 
     if (typeof code !== "string" || !code.trim()) {
-      return res.status(400).json({ error: "No se recibio ningun script Lua." });
-    }
-    if (code.length > 600000) {
-      return res.status(400).json({ error: "Script demasiado grande (max ~600KB)." });
+      return res.status(400).json({ error: "No se recibió ningún script." });
     }
 
-    const selectedLevel = Math.max(1, Math.min(3, Number(level) || 2));
-    console.log("[Obfuscate] size=" + code.length + " level=" + selectedLevel + " antiTamper=" + antiTamper);
+    console.log(`[QyrexObf] size=${code.length}`);
 
-    const result = obfuscateLua(code, selectedLevel, {
-      antiTamper: antiTamper,
-      antiTamperMode: antiTamperMode === "hard" ? "hard" : "soft",
-    });
+    const result = obfuscate(code);
 
     res.json({
       success: true,
       code: result,
       originalSize: code.length,
-      outputSize: result.length,
-      level: selectedLevel,
-      antiTamper: antiTamper,
-      compressionRatio: ((1 - result.length / Math.max(code.length, 1)) * 100).toFixed(2) + "%",
+      outputSize: result.length
     });
   } catch (err) {
-    console.error("[Error]", err);
-    res.status(500).json({ error: "Error procesando: " + (err.message || "unknown") });
+    console.error("[Error]", err.message);
+    res.status(500).json({ error: err.message || "Error desconocido" });
   }
 });
 
-app.get("/api/health", function (req, res) {
-  res.json({ ok: true, version: "ikgonavi-v2-antitamper-keyforge", maxSize: "600KB", levels: [1, 2, 3], antiTamper: true });
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, name: "QyrexObf", mode: "1-line" });
 });
 
-app.get("/", function (req, res) {
+app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
@@ -471,7 +291,7 @@ app.use(express.static(path.join(__dirname, "public")));
 module.exports = app;
 
 if (require.main === module) {
-  app.listen(PORT, "0.0.0.0", function () {
-    console.log("IKGONAVI Obfuscator v2 on port " + PORT);
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`QyrexObf corriendo en puerto ${PORT}`);
   });
 }
