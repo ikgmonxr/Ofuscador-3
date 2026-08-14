@@ -1,5 +1,4 @@
 "use strict";
-
 const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
@@ -58,7 +57,6 @@ function tokenize(source) {
   while (i < source.length) {
     const ch = source[i];
     if (/\s/.test(ch)) { i++; continue; }
-
     if (source.startsWith("--", i)) {
       const longEnd = source[i + 2] === "[" ? longBracketEnd(source, i + 2) : null;
       if (longEnd) i = longEnd;
@@ -68,14 +66,12 @@ function tokenize(source) {
       }
       continue;
     }
-
     if (ch === "[" && longBracketEnd(source, i)) {
       const end = longBracketEnd(source, i);
       out.push({ type: "longString", value: source.slice(i, end) });
       i = end;
       continue;
     }
-
     if (ch === "'" || ch === '"') {
       const quote = ch;
       let j = i + 1;
@@ -88,7 +84,6 @@ function tokenize(source) {
       i = j;
       continue;
     }
-
     if (isIdentifierStart(ch)) {
       let j = i + 1;
       while (isIdentifierPart(source[j])) j++;
@@ -97,7 +92,6 @@ function tokenize(source) {
       i = j;
       continue;
     }
-
     if (/[0-9]/.test(ch) || (ch === "." && /[0-9]/.test(source[i + 1] || ""))) {
       const match = source.slice(i).match(/^(?:0[xX][0-9a-fA-F_]+|0[bB][01_]+|(?:\d[\d_]*\.?[\d_]*|\.\d[\d_]*)(?:[eE][+-]?[\d_]+)?)/);
       const value = match ? match[0] : ch;
@@ -105,7 +99,6 @@ function tokenize(source) {
       i += value.length;
       continue;
     }
-
     const op = ["...", "..=", "==", "~=", "<=", ">=", "//", "..", "->", "+=", "-=", "*=", "/=", "%="]
       .find(c => source.startsWith(c, i));
     out.push({ type: "symbol", value: op || ch });
@@ -128,29 +121,48 @@ function decodeShortString(raw) {
   return out;
 }
 
-// Payload anti-tamper limpio en Lua
-const AQUA_ANTI_TAMPER_CODE = `
--- Aqua Obfuscator v1 - Anti-Tamper Check
-local _aqConfig = { Mode = "enforce", DebugReasons = false }
-local function _aqRep(r)
-    if _aqConfig.DebugReasons then warn("[Aqua] " .. r) end
-    if _aqConfig.Mode == "enforce" then error("aqua detected u lmao", 0) end
-end
-if math.floor(math.pi) ~= 3 then _aqRep("math check failed") end
-if type(game) == "table" then _aqRep("invalid game type") end
-`;
+// ===================== ANTI-TAMPER LAYER =====================
+function generateAntiTamper() {
+  const id = crypto.randomBytes(3).toString("hex");
+  const crashName = "_c" + id;
+  const checkName = "_t" + id;
 
+  // Checks for common sandbox / decompiler / debugger globals
+  return `
+local ${crashName}=function()while true do end end
+local ${checkName}=function()
+  if _G.lune or _G.lute or _G.wally or _G.rojo or _G.selene or _G.darklua then ${crashName}() end
+  if _G.plugin or _G.fetch or _G.console or _G.setTimeout or _G.Buffer then ${crashName}() end
+  if _G.window or _G.document or _G.navigator or _G.location then ${crashName}() end
+  if _G.process and (_G.process.env or _G.process.platform) then ${crashName}() end
+  if type(debug)=="table" and (debug.getinfo or debug.getupvalue or debug.getregistry) then
+    local ok=pcall(function() return debug.getinfo(print) end)
+    if ok then ${crashName}() end
+  end
+  if getfenv and setfenv then
+    local e=getfenv(0)
+    if e and (e.lune or e.process or e.fs or e.io) then ${crashName}() end
+  end
+  if not game or not workspace then ${crashName}() end
+  local ok,hs=pcall(function() return game:GetService("HttpService") end)
+  if not ok or not hs then ${crashName}() end
+end
+${checkName}()
+`;
+}
+
+// ===================== OBFUSCATE =====================
 function obfuscate(source, options = {}) {
   const code = String(source || "").trim();
   if (!code) throw new Error("Script vacío");
 
   const tokens = tokenize(code);
   const encryptStrings = options.encryptStrings !== false;
-  const includeAntiTamper = options.antiTamper === true;
+  const antiTamper = options.antiTamper !== false;
 
+  // 1. Rename solo variables locales
   const renameMap = new Map();
   let counter = 0;
-
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i].type === "keyword" && tokens[i].value === "local") {
       let j = i + 1;
@@ -172,6 +184,7 @@ function obfuscate(source, options = {}) {
     }
   }
 
+  // 2. Aplicar rename (evitar propiedades)
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (t.type === "identifier" && renameMap.has(t.value)) {
@@ -183,22 +196,21 @@ function obfuscate(source, options = {}) {
     }
   }
 
-  const key = crypto.randomBytes(3);
+  // 3. Cifrado de strings
+  const key = crypto.randomBytes(4);
   const decName = "_d" + crypto.randomBytes(2).toString("hex");
   const keyArr = [...key].join(",");
 
   let body = "";
   let prevText = "";
-
   for (const t of tokens) {
     let cur = t.value;
-
     if (encryptStrings && t.type === "string") {
       const decoded = decodeShortString(t.value);
       if (
         decoded &&
         decoded.length > 0 &&
-        decoded.length <= 220 &&
+        decoded.length <= 280 &&
         !/https?:\/\//i.test(decoded) &&
         !/rbxassetid/i.test(decoded)
       ) {
@@ -208,11 +220,9 @@ function obfuscate(source, options = {}) {
         cur = `${decName}({${bytes.join(",")}})`;
       }
     }
-
     const needSpace =
       (isWordEnd(prevText) && isWordStart(cur)) ||
       (prevText.endsWith("-") && cur.startsWith("-"));
-
     if (needSpace) body += " ";
     body += cur;
     prevText = cur;
@@ -222,8 +232,14 @@ function obfuscate(source, options = {}) {
     ? `local ${decName}=function(t)local k={${keyArr}}local r={}for i=1,#t do r[i]=string.char(bit32.bxor(t[i],k[(i-1)%#k+1]))end return table.concat(r)end;`
     : "";
 
-  const antiTamperPayload = includeAntiTamper ? AQUA_ANTI_TAMPER_CODE : "";
-  const result = `-- Protect by QyrexObf\n${antiTamperPayload}\n${decoder}${body}`;
+  const anti = antiTamper ? generateAntiTamper() : "";
+
+  // Junk code para dificultar análisis estático
+  const junk = `
+local _j${crypto.randomBytes(2).toString("hex")}=function()return (function()local a=1 for i=1,3 do a=a+i end return a end)()end
+`;
+
+  const result = `-- Protect by QyrexObf + AntiTamper\n${anti}${junk}${decoder}${body}`;
 
   return {
     code: result,
@@ -241,6 +257,7 @@ function sendJson(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// ===================== SERVIDOR =====================
 const server = http.createServer((req, res) => {
   if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
     const indexPath = indexCandidates.find(c => fs.existsSync(c));
@@ -258,7 +275,6 @@ const server = http.createServer((req, res) => {
 
   let received = 0;
   const parts = [];
-
   req.on("data", chunk => {
     received += chunk.length;
     if (received > MAX_SOURCE_BYTES + 60 * 1024) {
@@ -278,7 +294,7 @@ const server = http.createServer((req, res) => {
 
     const code = body && body.code;
     if (typeof code !== "string" || !code.trim()) {
-      return sendJson(res, 400, { error: "Pega un script primeiro" });
+      return sendJson(res, 400, { error: "Pega un script primero" });
     }
     if (Buffer.byteLength(code, "utf8") > MAX_SOURCE_BYTES) {
       return sendJson(res, 413, { error: "Script demasiado grande" });
@@ -299,5 +315,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log("QyrexObf corriendo en puerto", PORT);
+  console.log("QyrexObf + AntiTamper corriendo en puerto", PORT);
 });
