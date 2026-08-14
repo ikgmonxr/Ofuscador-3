@@ -1,702 +1,361 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IKGONAVI — Lua Obfuscator</title>
-<style>
-* {
-    box-sizing: border-box;
+const express = require("express");
+const path = require("path");
+const crypto = require("crypto");
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json({ limit: "5mb" }));
+
+/* IKGONAVI v7 — syntax-safe Extreme for Roblox executors */
+
+const RESERVED = new Set([
+  "and","break","do","else","elseif","end","false","for","function",
+  "goto","if","in","local","nil","not","or","repeat","return","then",
+  "true","until","while","_G","_ENV","self","game","workspace","script",
+  "require","Instance","Enum","Color3","Vector3","CFrame","TweenInfo",
+  "task","wait","spawn","delay","tick","time","os","math","string",
+  "table","pairs","ipairs","next","type","typeof","print","warn","error",
+  "pcall","xpcall","select","unpack","rawget","rawset","rawequal",
+  "setmetatable","getmetatable","coroutine","debug","utf8","bit32",
+  "SharedTable","buffer","vector"
+]);
+
+function rnd(n) {
+  n = n || 6;
+  const a = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const b = a + "0123456789";
+  let s = a[(Math.random() * 52) | 0];
+  for (let i = 1; i < n; i++) s += b[(Math.random() * b.length) | 0];
+  return s;
 }
-html {
-    scroll-behavior: smooth;
+
+function ln() {
+  const p = "abcdefghijkmnopqrstuvwxyz";
+  return "_" + p[(Math.random() * p.length) | 0] + rnd(5);
 }
-body {
-    margin: 0;
-    min-height: 100vh;
-    background:
-        radial-gradient(
-            circle at 50% -20%,
-            rgba(39, 137, 255, .30),
-            transparent 40%
-        ),
-        #040811;
-    color: #f5f8ff;
-    font-family:
-        Inter,
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        Arial,
-        sans-serif;
+
+function xorBytes(str, key) {
+  const kb = Buffer.from(String(key), "utf8");
+  const out = [];
+  for (let i = 0; i < str.length; i++) out.push(str.charCodeAt(i) ^ kb[i % kb.length]);
+  return out;
 }
-/* BACKGROUND */
-body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background-image:
-        linear-gradient(
-            rgba(255,255,255,.018) 1px,
-            transparent 1px
-        ),
-        linear-gradient(
-            90deg,
-            rgba(255,255,255,.018) 1px,
-            transparent 1px
-        );
-    background-size: 45px 45px;
-    mask-image:
-        linear-gradient(
-            to bottom,
-            black,
-            transparent
-        );
+
+function bytesToString(arr) {
+  const CHUNK = 8192;
+  let out = "";
+  for (let i = 0; i < arr.length; i += CHUNK) {
+    out += String.fromCharCode.apply(null, arr.slice(i, i + CHUNK));
+  }
+  return out;
 }
-/* NAVBAR */
-.navbar {
-    width: min(1180px, 92%);
-    height: 76px;
-    margin: auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+
+function rc4(data, keyBytes) {
+  const S = [];
+  for (let i = 0; i < 256; i++) S[i] = i;
+  let j = 0;
+  for (let i = 0; i < 256; i++) {
+    j = (j + S[i] + keyBytes[i % keyBytes.length]) % 256;
+    const t = S[i]; S[i] = S[j]; S[j] = t;
+  }
+  let i = 0; j = 0;
+  const out = [];
+  for (let n = 0; n < data.length; n++) {
+    i = (i + 1) % 256;
+    j = (j + S[i]) % 256;
+    const t = S[i]; S[i] = S[j]; S[j] = t;
+    out.push(data[n] ^ S[(S[i] + S[j]) % 256]);
+  }
+  return out;
 }
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+
+function luaByteTable(arr) {
+  const parts = [];
+  for (let i = 0; i < arr.length; i += 70) {
+    parts.push(arr.slice(i, i + 70).join(","));
+  }
+  if (parts.length === 1) return "{" + parts[0] + "}";
+  return "(function()local t={}for _,c in ipairs({" +
+    parts.map(function(p) { return "{" + p + "}"; }).join(",") +
+    "})do for _,v in ipairs(c)do t[#t+1]=v end end return t end)()";
 }
-.logo-box {
-    width: 40px;
-    height: 40px;
-    display: grid;
-    place-items: center;
-    border-radius: 11px;
-    background:
-        linear-gradient(
-            135deg,
-            #4bbcff,
-            #2468ff
-        );
-    box-shadow:
-        0 0 30px
-        rgba(42, 139, 255, .35);
-    font-weight: 900;
-    font-size: 20px;
+
+function stripComments(code) {
+  code = code.replace(/--\[=*\[([\s\S]*?)\]=*\]/g, "");
+  code = code.replace(/--[^\n]*/g, "");
+  return code;
 }
-.logo-text strong {
-    display: block;
-    font-size: 14px;
-    letter-spacing: 2px;
-}
-.logo-text small {
-    display: block;
-    margin-top: 2px;
-    color: #5f718b;
-    font-size: 8px;
-    letter-spacing: 2px;
-}
-.online {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #7e91ac;
-    font-size: 10px;
-    letter-spacing: 1px;
-}
-.online-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #3be69b;
-    box-shadow:
-        0 0 12px
-        rgba(59,230,155,.8);
-}
-/* HERO */
-.hero {
-    width: min(900px, 92%);
-    margin: auto;
-    padding:
-        90px
-        0
-        65px;
-    text-align: center;
-}
-.tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding:
-        8px
-        13px;
-    border:
-        1px solid
-        rgba(69,156,255,.25);
-    border-radius: 100px;
-    background:
-        rgba(33,114,218,.09);
-    color: #7fc1ff;
-    font-size: 9px;
-    letter-spacing: 1.7px;
-}
-.hero h1 {
-    margin:
-        24px
-        0
-        18px;
-    font-size:
-        clamp(45px, 7vw, 78px);
-    line-height: .96;
-    letter-spacing: -4px;
-}
-.gradient {
-    background:
-        linear-gradient(
-            90deg,
-            #5ac2ff,
-            #3579ff
-        );
-    color: transparent;
-    background-clip: text;
-    -webkit-background-clip: text;
-}
-.hero p {
-    max-width: 580px;
-    margin: auto;
-    color: #71829c;
-    line-height: 1.7;
-    font-size: 14px;
-}
-/* WORKSPACE */
-.workspace {
-    width: min(1180px, 92%);
-    margin: auto;
-    display: grid;
-    grid-template-columns:
-        minmax(0, 1fr)
-        120px
-        minmax(0, 1fr);
-    align-items: center;
-    gap: 20px;
-}
-/* EDITOR */
-.editor {
-    overflow: hidden;
-    border:
-        1px solid
-        rgba(101,153,211,.16);
-    border-radius: 16px;
-    background:
-        rgba(8,14,26,.90);
-    box-shadow:
-        0 30px 80px
-        rgba(0,0,0,.30);
-    transition: .2s;
-}
-.editor:focus-within {
-    border-color:
-        rgba(63,156,255,.45);
-    box-shadow:
-        0 0 0 1px
-        rgba(63,156,255,.08),
-        0 30px 80px
-        rgba(0,0,0,.30);
-}
-.editor-top {
-    height: 52px;
-    padding:
-        0
-        16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom:
-        1px solid
-        rgba(255,255,255,.05);
-}
-.file {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    color: #9baac0;
-    font-size: 11px;
-}
-.file-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #4ab2ff;
-    box-shadow:
-        0 0 10px
-        rgba(74,178,255,.5);
-}
-.file-dot.green {
-    background: #38e69a;
-    box-shadow:
-        0 0 10px
-        rgba(56,230,154,.5);
-}
-.editor textarea {
-    display: block;
-    width: 100%;
-    height: 320px;
-    padding: 20px;
-    border: 0;
-    outline: 0;
-    resize: none;
-    background:
-        #060b14;
-    color: #cfe3ff;
-    font-family:
-        Consolas,
-        "Courier New",
-        monospace;
-    font-size: 13px;
-    line-height: 1.7;
-}
-.editor textarea::placeholder {
-    color: #34445b;
-}
-.editor-bottom {
-    height: 46px;
-    padding:
-        0
-        15px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: #52647d;
-    font-size: 9px;
-}
-select {
-    padding:
-        7px
-        10px;
-    border:
-        1px solid
-        #243a58;
-    border-radius: 7px;
-    outline: none;
-    background:
-        #0a1322;
-    color: #9bb1cd;
-    font-size: 9px;
-    cursor: pointer;
-}
-/* BUTTON */
-.action {
-    text-align: center;
-}
-#obfuscate {
-    width: 100%;
-    padding:
-        14px
-        8px;
-    border: 0;
-    border-radius: 10px;
-    background:
-        linear-gradient(
-            135deg,
-            #42b5ff,
-            #276bff
-        );
-    color: white;
-    font-weight: 800;
-    font-size: 10px;
-    letter-spacing: .8px;
-    cursor: pointer;
-    box-shadow:
-        0 15px 35px
-        rgba(35,116,255,.22);
-    transition: .2s;
-}
-#obfuscate:hover {
-    transform:
-        translateY(-2px);
-    box-shadow:
-        0 18px 45px
-        rgba(35,116,255,.35);
-}
-#obfuscate:disabled {
-    opacity: .55;
-    cursor: wait;
-    transform: none;
-}
-.action p {
-    margin:
-        10px
-        0
-        0;
-    color: #43536a;
-    font-size: 8px;
-    line-height: 1.4;
-}
-/* BUTTONS */
-.small-button {
-    border: 0;
-    background: transparent;
-    color: #63738c;
-    font-size: 9px;
-    cursor: pointer;
-}
-.small-button:hover {
-    color: white;
-}
-/* FEATURES */
-.features {
-    width: min(1000px, 92%);
-    margin:
-        70px
-        auto
-        0;
-    display: grid;
-    grid-template-columns:
-        repeat(3, 1fr);
-    gap: 15px;
-}
-.feature {
-    padding: 22px;
-    border:
-        1px solid
-        rgba(255,255,255,.055);
-    border-radius: 14px;
-    background:
-        rgba(9,15,27,.55);
-}
-.feature-number {
-    color: #328fff;
-    font-size: 10px;
-    font-weight: 800;
-}
-.feature h3 {
-    margin:
-        11px
-        0
-        7px;
-    font-size: 13px;
-}
-.feature p {
-    margin: 0;
-    color: #64738a;
-    font-size: 11px;
-    line-height: 1.6;
-}
-/* FOOTER */
-footer {
-    padding:
-        55px
-        0
-        30px;
-    text-align: center;
-    color: #35445b;
-    font-size: 9px;
-}
-/* MOBILE */
-@media (max-width: 850px) {
-    .hero {
-        padding-top: 60px;
+
+function renameLocals(code) {
+  const map = new Map();
+  let c = 0;
+  const re = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)/g;
+  let m;
+  while ((m = re.exec(code)) !== null) {
+    const names = m[1].split(/\s*,\s*/);
+    for (let ni = 0; ni < names.length; ni++) {
+      const name = names[ni].trim();
+      if (name && !map.has(name) && !RESERVED.has(name)) {
+        c++;
+        map.set(name, ln() + c);
+      }
     }
-    .hero h1 {
-        letter-spacing: -2px;
-    }
-    .workspace {
-        grid-template-columns: 1fr;
-    }
-    .action {
-        width: 220px;
-        margin: 0 auto;
-    }
-    .features {
-        grid-template-columns: 1fr;
-    }
+  }
+  const entries = [...map.entries()].sort(function(a, b) { return b[0].length - a[0].length; });
+  for (let ei = 0; ei < entries.length; ei++) {
+    const oldN = entries[ei][0];
+    const newN = entries[ei][1];
+    const escaped = oldN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    code = code.replace(new RegExp("\\b" + escaped + "\\b", "g"), newN);
+  }
+  return code;
 }
-</style>
-</head>
-<body>
-<header class="navbar">
-    <div class="logo">
-        <div class="logo-box">
-            I
-        </div>
-        <div class="logo-text">
-            <strong>IKGONAVI</strong>
-            <small>OBFUSCATOR</small>
-        </div>
-    </div>
-    <div class="online">
-        <span class="online-dot"></span>
-        ENGINE ONLINE
-    </div>
-</header>
-<section class="hero">
-    <div class="tag">
-        ✦ LUA / ROBLOX PROTECTION ENGINE
-    </div>
-    <h1>
-        Protect your code.<br>
-        <span class="gradient">
-            Hide your logic.
-        </span>
-    </h1>
-    <p>
-        Ofuscador potente para scripts Lua orientado a Roblox.
-        Variables renombradas, strings cifrados, junk code y capa Extreme con encoding completo.
-    </p>
-</section>
-<section class="workspace">
-    <!-- INPUT -->
-    <div class="editor">
-        <div class="editor-top">
-            <div class="file">
-                <span class="file-dot"></span>
-                script.lua
-            </div>
-            <button
-                class="small-button"
-                id="clear"
-            >
-                CLEAR
-            </button>
-        </div>
-        <textarea
-            id="input"
-            spellcheck="false"
-            placeholder="-- Paste your Lua / Roblox script here
-local player = game.Players.LocalPlayer
-print(player.Name)"
-        ></textarea>
-        <div class="editor-bottom">
-            <span id="inputInfo">
-                0 characters
-            </span>
-            <select id="level">
-                <option value="1">
-                    BASIC
-                </option>
-                <option value="2">
-                    ADVANCED
-                </option>
-                <option value="3" selected>
-                    EXTREME
-                </option>
-            </select>
-        </div>
-    </div>
-    <!-- ACTION -->
-    <div class="action">
-        <button id="obfuscate">
-            ✦ &nbsp; OBFUSCATE
-        </button>
-        <p id="status">
-            Ready to process
-        </p>
-    </div>
-    <!-- OUTPUT -->
-    <div class="editor">
-        <div class="editor-top">
-            <div class="file">
-                <span class="file-dot green"></span>
-                protected.lua
-            </div>
-            <button
-                class="small-button"
-                id="copy"
-            >
-                COPY
-            </button>
-        </div>
-        <textarea
-            id="output"
-            readonly
-            spellcheck="false"
-            placeholder="Your protected code will appear here..."
-        ></textarea>
-        <div class="editor-bottom">
-            <span id="outputInfo">
-                0 characters
-            </span>
-            <span id="result">
-                READY
-            </span>
-        </div>
-    </div>
-</section>
-<section class="features">
-    <div class="feature">
-        <div class="feature-number">
-            01
-        </div>
-        <h3>
-            Variable Protection
-        </h3>
-        <p>
-            Renombra variables locales de forma agresiva con nombres hex y aleatorios.
-        </p>
-    </div>
-    <div class="feature">
-        <div class="feature-number">
-            02
-        </div>
-        <h3>
-            String Encryption
-        </h3>
-        <p>
-            Cifrado XOR de strings + decoder en runtime (Advanced / Extreme).
-        </p>
-    </div>
-    <div class="feature">
-        <div class="feature-number">
-            03
-        </div>
-        <h3>
-            Extreme Layer
-        </h3>
-        <p>
-            Encoding completo del script + loadstring. Muy difícil de leer a mano.
-        </p>
-    </div>
-</section>
-<footer>
-    © 2026 IKGONAVI • Lua / Roblox Obfuscator
-</footer>
-<script>
-const input =
-    document.getElementById("input");
-const output =
-    document.getElementById("output");
-const level =
-    document.getElementById("level");
-const button =
-    document.getElementById("obfuscate");
-const clear =
-    document.getElementById("clear");
-const copy =
-    document.getElementById("copy");
-const inputInfo =
-    document.getElementById("inputInfo");
-const outputInfo =
-    document.getElementById("outputInfo");
-const status =
-    document.getElementById("status");
-const result =
-    document.getElementById("result");
-function counters() {
-    inputInfo.textContent =
-        `${input.value.length.toLocaleString()} characters`;
-    outputInfo.textContent =
-        `${output.value.length.toLocaleString()} characters`;
+
+function obfuscateNumbers(code) {
+  return code.replace(/\b(\d{2,5})\b/g, function(_, num) {
+    const n = parseInt(num, 10);
+    if (n < 12 || n > 50000) return num;
+    if (Math.random() < 0.4) return "(" + (n + 7) + "-7)";
+    if (Math.random() < 0.5) return "(" + (n * 2) + "//2)";
+    return num;
+  });
 }
-input.addEventListener(
-    "input",
-    counters
-);
-clear.addEventListener(
-    "click",
-    () => {
-        input.value = "";
-        output.value = "";
-        result.textContent =
-            "READY";
-        status.textContent =
-            "Ready to process";
-        counters();
+
+function injectJunk(code) {
+  function junk() {
+    const a = ln();
+    const opts = [
+      "do local " + a + "=nil end",
+      "pcall(function() end)",
+      "local " + a + "=nil"
+    ];
+    return opts[(Math.random() * opts.length) | 0];
+  }
+  const lines = code.split("\n");
+  const out = [];
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    out.push(line);
+    const t = line.trim();
+    const endsUnsafe =
+      /function\s*$/.test(t) ||
+      /then\s*$/.test(t) ||
+      /else\s*$/.test(t) ||
+      /do\s*$/.test(t) ||
+      /repeat\s*$/.test(t) ||
+      /,\s*$/.test(t) ||
+      /\(\s*$/.test(t) ||
+      /\{\s*$/.test(t) ||
+      /=\s*$/.test(t);
+    if (t.length > 12 && !endsUnsafe && t.indexOf("--") !== 0 && Math.random() > 0.7) {
+      out.push(junk());
     }
-);
-copy.addEventListener(
-    "click",
-    async () => {
-        if (!output.value) {
-            return;
-        }
-        try {
-            await navigator.clipboard.writeText(
-                output.value
-            );
-            copy.textContent =
-                "COPIED ✓";
-            setTimeout(
-                () => {
-                    copy.textContent =
-                        "COPY";
-                },
-                1300
-            );
-        } catch {
-            output.select();
-            document.execCommand(
-                "copy"
-            );
-        }
+  }
+  return out.join("\n");
+}
+
+function protectStrings(code, level) {
+  const strings = [];
+  code = code.replace(/(["'])(?:\\.|(?!\1)[\s\S])*?\1/g, function(match) {
+    const id = strings.length;
+    strings.push(match);
+    return "___S" + id + "___";
+  });
+  code = stripComments(code);
+  if (level < 2) {
+    for (let i = 0; i < strings.length; i++) {
+      code = code.replace("___S" + i + "___", strings[i]);
     }
-);
-button.addEventListener(
-    "click",
-    async () => {
-        if (!input.value.trim()) {
-            status.textContent =
-                "Paste a Lua script first";
-            input.focus();
-            return;
-        }
-        button.disabled = true;
-        button.textContent =
-            "◌ PROCESSING...";
-        status.textContent =
-            "Sending script to engine...";
-        result.textContent =
-            "PROCESSING";
-        try {
-            const response =
-                await fetch(
-                    "/api/obfuscate",
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
-                        body: JSON.stringify({
-                            code:
-                                input.value,
-                            level:
-                                Number(
-                                    level.value
-                                )
-                        })
-                    }
-                );
-            const data =
-                await response.json();
-            if (!response.ok) {
-                throw new Error(
-                    data.error ||
-                    "Obfuscation failed"
-                );
-            }
-            output.value =
-                data.code;
-            counters();
-            result.textContent =
-                "PROTECTED";
-            status.textContent =
-                "Obfuscation completed ✓";
-        } catch (error) {
-            result.textContent =
-                "ERROR";
-            status.textContent =
-                error.message;
-        } finally {
-            button.disabled =
-                false;
-            button.textContent =
-                "✦ OBFUSCATE";
-        }
+    return { code: code, decoder: "" };
+  }
+  const key1 = crypto.randomBytes(6).toString("hex");
+  const decName = ln();
+  const tables = [];
+  for (let i = 0; i < strings.length; i++) {
+    let content = strings[i].slice(1, -1)
+      .replace(/\\n/g, "\n").replace(/\\t/g, "\t")
+      .replace(/\\r/g, "\r").replace(/\\"/g, '"')
+      .replace(/\\'/g, "'").replace(/\\\\/g, "\\");
+    const enc = xorBytes(content, key1);
+    tables.push(luaByteTable(enc));
+  }
+  const decoder =
+    "local " + decName + "=(function()" +
+    "local _k=\"" + key1 + "\" " +
+    "local function _d(t)" +
+    "local r={} " +
+    "for i=1,#t do r[i]=string.char(bit32.bxor(t[i],string.byte(_k,(i-1)%#_k+1))) end " +
+    "return table.concat(r) end " +
+    "return _d end)()";
+  for (let i = 0; i < strings.length; i++) {
+    code = code.replace("___S" + i + "___", decName + "(" + tables[i] + ")");
+  }
+  return { code: code, decoder: decoder };
+}
+
+function buildAntiTamper() {
+  return [
+    "do",
+    "  local function __k(r) error('[IKG] '..tostring(r), 0) end",
+    "  if type(string) ~= 'table' or type(math) ~= 'table' then __k('P1') end",
+    "  if type(string.byte) ~= 'function' or string.byte('A') ~= 65 then __k('P2') end",
+    "  if type(bit32) ~= 'table' or type(bit32.bxor) ~= 'function' then __k('P3') end",
+    "  if bit32.bxor(85, 170) ~= 255 then __k('P4') end",
+    "end"
+  ].join("\n");
+}
+
+function buildUltra(full) {
+  const k1 = crypto.randomBytes(10).toString("hex");
+  const k2 = crypto.randomBytes(8).toString("hex");
+  const rc4Key = Array.from(crypto.randomBytes(12));
+
+  let layer = xorBytes(full, k1);
+  layer = rc4(layer, rc4Key);
+  layer = xorBytes(bytesToString(layer), k2);
+
+  const PAGE = 90;
+  const pages = [];
+  for (let i = 0; i < layer.length; i += PAGE) {
+    pages.push(layer.slice(i, i + PAGE));
+  }
+
+  const n = {
+    pages: ln(), key1: ln(), key2: ln(), rk: ln(),
+    xor: ln(), acc: ln(), tmp: ln(), src: ln(), fn: ln(),
+    S: ln(), i: ln(), j: ln(), p: ln(), out: ln(), dec: ln()
+  };
+
+  let s = "-- Protect by ikgonavi haha\n";
+  s += buildAntiTamper() + "\n";
+  s += "local " + n.key1 + "=\"" + k1 + "\"\n";
+  s += "local " + n.key2 + "=\"" + k2 + "\"\n";
+  s += "local " + n.rk + "={" + rc4Key.join(",") + "}\n";
+  s += "local " + n.pages + "={\n";
+  for (let i = 0; i < pages.length; i++) {
+    s += luaByteTable(pages[i]) + (i < pages.length - 1 ? "," : "") + "\n";
+  }
+  s += "}\n";
+
+  s += "local function " + n.xor + "(t,k)\n";
+  s += "local r={}\n";
+  s += "for i=1,#t do r[i]=string.char(bit32.bxor(t[i],string.byte(k,(i-1)%#k+1))) end\n";
+  s += "return table.concat(r)\n";
+  s += "end\n";
+
+  s += "local " + n.acc + "={}\n";
+  s += "for _," + n.p + " in ipairs(" + n.pages + ") do\n";
+  s += "for " + n.i + "=1,#" + n.p + " do " + n.acc + "[#" + n.acc + "+1]=" + n.p + "[" + n.i + "] end\n";
+  s += "end\n";
+
+  s += "local " + n.tmp + "=" + n.xor + "(" + n.acc + "," + n.key2 + ")\n";
+  s += "local " + n.out + "={}\n";
+  s += "for " + n.i + "=1,#" + n.tmp + " do " + n.out + "[" + n.i + "]=string.byte(" + n.tmp + "," + n.i + ") end\n";
+
+  s += "do\n";
+  s += "local " + n.S + "={}\n";
+  s += "for " + n.i + "=0,255 do " + n.S + "[" + n.i + "]=" + n.i + " end\n";
+  s += "local " + n.j + "=0\n";
+  s += "for " + n.i + "=0,255 do\n";
+  s += n.j + "=(" + n.j + "+" + n.S + "[" + n.i + "]+" + n.rk + "[(" + n.i + "%#" + n.rk + ")+1])%256\n";
+  s += n.S + "[" + n.i + "]," + n.S + "[" + n.j + "]=" + n.S + "[" + n.j + "]," + n.S + "[" + n.i + "]\n";
+  s += "end\n";
+  s += n.i + "=0 " + n.j + "=0\n";
+  s += "local " + n.dec + "={}\n";
+  s += "for idx=1,#" + n.out + " do\n";
+  s += n.i + "=(" + n.i + "+1)%256\n";
+  s += n.j + "=(" + n.j + "+" + n.S + "[" + n.i + "])%256\n";
+  s += n.S + "[" + n.i + "]," + n.S + "[" + n.j + "]=" + n.S + "[" + n.j + "]," + n.S + "[" + n.i + "]\n";
+  s += n.dec + "[idx]=bit32.bxor(" + n.out + "[idx]," + n.S + "[(" + n.S + "[" + n.i + "]+" + n.S + "[" + n.j + "])%256])\n";
+  s += "end\n";
+  s += n.out + "=" + n.dec + "\n";
+  s += "end\n";
+
+  s += "local " + n.src + "=" + n.xor + "(" + n.out + "," + n.key1 + ")\n";
+  s += "local __ls=loadstring or load\n";
+  s += "if type(__ls)~=\"function\" then error(\"IKG: loadstring not available\",0) end\n";
+  s += "local " + n.fn + ",__err=__ls(" + n.src + ")\n";
+  s += "if not " + n.fn + " then error(\"IKG load failed: \"..tostring(__err),0) end\n";
+  s += "return " + n.fn + "()\n";
+  return s;
+}
+
+function minify(code) {
+  return code
+    .split("\n")
+    .map(function(l) { return l.replace(/[ \t]+$/g, ""); })
+    .filter(function(l, i, arr) {
+      if (l.trim() === "" && i > 0 && arr[i - 1].trim() === "") return false;
+      return true;
+    })
+    .join("\n")
+    .trim();
+}
+
+function obfuscateLua(source, level) {
+  let code = source.trim();
+  code = stripComments(code);
+
+  if (level >= 1) code = renameLocals(code);
+  if (level >= 2) {
+    code = obfuscateNumbers(code);
+    if (level === 2) code = injectJunk(code);
+  }
+
+  const prot = protectStrings(code, level);
+  code = prot.code;
+  const decoder = prot.decoder || "";
+  code = minify(code);
+
+  if (level === 1) {
+    return "-- Protect by ikgonavi haha\n" + code;
+  }
+  if (level === 2) {
+    return "-- Protect by ikgonavi haha\n" + (decoder ? decoder + "\n" : "") + code;
+  }
+  const payload = (decoder ? decoder + "\n" : "") + code;
+  return buildUltra(payload);
+}
+
+app.post("/api/obfuscate", function(req, res) {
+  try {
+    const code = req.body && req.body.code;
+    const level = req.body && req.body.level;
+    if (typeof code !== "string" || !code.trim()) {
+      return res.status(400).json({ error: "No se recibio ningun script Lua." });
     }
-);
-counters();
-</script>
-</body>
-</html>
+    if (code.length > 280000) {
+      return res.status(400).json({ error: "Script demasiado grande." });
+    }
+    const selectedLevel = Math.max(1, Math.min(3, Number(level) || 1));
+    const result = obfuscateLua(code, selectedLevel);
+    res.json({
+      success: true,
+      code: result,
+      originalSize: code.length,
+      outputSize: result.length,
+      level: selectedLevel
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error interno: " + (err.message || "unknown") });
+  }
+});
+
+app.get("/api/health", function(req, res) {
+  res.json({ ok: true, version: "v7-safe" });
+});
+
+app.get("/", function(req, res) {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.use(express.static(path.join(__dirname, "public")));
+
+module.exports = app;
+
+if (require.main === module) {
+  app.listen(PORT, "0.0.0.0", function() {
+    console.log("IKGONAVI v7 SAFE running on port " + PORT);
+  });
+}
