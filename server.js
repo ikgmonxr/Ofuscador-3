@@ -164,7 +164,10 @@ app.get('/api/admin/stats', (req, res) => {
 });
 
 // ====================== FRONTEND ======================
-app.get('*', (req, res) => {
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: "Ruta de API no encontrada" });
+  }
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
