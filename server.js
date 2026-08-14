@@ -1,379 +1,346 @@
-/**
- * QyrexObf Engine — Bytecode Payload Loader & Single-Line Engine
- */
-const express = require("express");
-const path = require("path");
-const crypto = require("crypto");
+const express = require('express');
+
+const cors = require('cors');
+
+const fs = require('fs');
+
+const path = require('path');
+
+const crypto = require('crypto');
+
+const rateLimit = require('express-rate-limit');
+
+
+
 const app = express();
+
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: "12mb" }));
 
-const RESERVED = new Set([
-  "and","break","do","else","elseif","end","false","for","function",
-  "goto","if","in","local","nil","not","or","repeat","return","then",
-  "true","until","while","_G","_ENV","self","game","workspace","script",
-  "require","Instance","Enum","Color3","Vector3","CFrame","TweenInfo",
-  "UDim2","UDim","Rect","Region3","Ray","BrickColor","NumberSequence",
-  "ColorSequence","NumberRange","PhysicalProperties","Axes","Faces",
-  "task","wait","spawn","delay","tick","time","os","math","string",
-  "table","pairs","ipairs","next","type","typeof","print","warn","error",
-  "pcall","xpcall","select","unpack","rawget","rawset","rawequal","rawlen",
-  "setmetatable","getmetatable","coroutine","debug","utf8","bit32",
-  "buffer","vector","SharedTable","getfenv","setfenv","loadstring","load",
-  "assert","collectgarbage","newproxy","gcinfo","ypcall",
-  "settings","UserSettings","stats","UserInputService","Players","RunService",
-  "TweenService","HttpService","ReplicatedStorage","Lighting","CoreGui",
-  "Workspace","Camera","Mouse","Humanoid","HumanoidRootPart","LocalPlayer",
-  "GetService","FindFirstChild","WaitForChild","GetChildren","GetDescendants",
-  "IsA","Clone","Destroy","Connect","Disconnect","Fire","Invoke"
-]);
 
-function rnd(n) {
-  n = n || 6;
-  const a = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const b = a + "0123456789";
-  let s = a[(Math.random() * 52) | 0];
-  for (let i = 1; i < n; i++) s += b[(Math.random() * b.length) | 0];
-  return s;
-}
+// ====================== CONFIG ======================
 
-function ln() {
-  const p = "abcdefghijkmnopqrstuvwxyz";
-  return "_" + p[(Math.random() * p.length) | 0] + rnd(6);
-}
+const DATA_FILE = path.join(__dirname, 'data.json');
 
-function extractStrings(code) {
-  const strings = [];
-  let out = "";
-  let i = 0;
-  while (i < code.length) {
-    if (code[i] === "[") {
-      let m = i + 1;
-      let eqs = "";
-      while (m < code.length && code[m] === "=") {
-        eqs += "=";
-        m++;
-      }
-      if (m < code.length && code[m] === "[") {
-        const endMark = "]" + eqs + "]";
-        const endIdx = code.indexOf(endMark, m + 1);
-        if (endIdx !== -1) {
-          const full = code.slice(i, endIdx + endMark.length);
-          const id = strings.length;
-          strings.push(full);
-          out += "___S" + id + "___";
-          i = endIdx + endMark.length;
-          continue;
-        }
-      }
-    }
-    if (code[i] === '"' || code[i] === "'") {
-      const q = code[i];
-      let j = i + 1;
-      let s = q;
-      while (j < code.length) {
-        if (code[j] === "\\") {
-          s += code[j];
-          if (j + 1 < code.length) {
-            s += code[j + 1];
-            j += 2;
-          } else j++;
-          continue;
-        }
-        s += code[j];
-        if (code[j] === q) {
-          j++;
-          break;
-        }
-        j++;
-      }
-      const id = strings.length;
-      strings.push(s);
-      out += "___S" + id + "___";
-      i = j;
-      continue;
-    }
-    out += code[i];
-    i++;
-  }
-  return { code: out, strings };
-}
 
-function stripComments(code) {
-  let result = "";
-  let i = 0;
-  while (i < code.length) {
-    if (code[i] === "-" && code[i + 1] === "-") {
-      let m = i + 2;
-      if (code[m] === "[") {
-        let eqs = "";
-        m++;
-        while (m < code.length && code[m] === "=") {
-          eqs += "=";
-          m++;
-        }
-        if (code[m] === "[") {
-          const endMark = "]" + eqs + "]";
-          const endIdx = code.indexOf(endMark, m + 1);
-          if (endIdx !== -1) {
-            i = endIdx + endMark.length;
-            continue;
-          }
-        }
-      }
-      i += 2;
-      while (i < code.length && code[i] !== "\n") i++;
-      continue;
-    }
-    result += code[i];
-    i++;
-  }
-  return result;
-}
 
-function renameLocals(code) {
-  const map = new Map();
-  let counter = 0;
-  const regex = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g;
-  let match;
-  while ((match = regex.exec(code)) !== null) {
-    const name = match[1];
-    if (!map.has(name) && !RESERVED.has(name) && name.length > 1) {
-      counter++;
-      map.set(name, ln() + String(counter));
-    }
-  }
-  const multi = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)+)/g;
-  while ((match = multi.exec(code)) !== null) {
-    const parts = match[1].split(/\s*,\s*/);
-    for (const name of parts) {
-      if (!map.has(name) && !RESERVED.has(name) && name.length > 1) {
-        counter++;
-        map.set(name, ln() + String(counter));
-      }
-    }
-  }
-  const entries = [...map.entries()].sort((a, b) => b[0].length - a[0].length);
-  let result = code;
-  for (const [oldName, newName] of entries) {
-    const pattern = new RegExp("\\b" + oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g");
-    result = result.replace(pattern, newName);
-  }
-  return result;
-}
+// ====================== MIDDLEWARE ======================
 
-function obfuscateNumbers(code) {
-  return code.replace(/\b(\d{2,4})\b/g, (match, num) => {
-    const n = parseInt(num, 10);
-    if (n < 16 || n > 9000) return num;
-    const r = Math.random();
-    if (r < 0.25) return "(" + (n + 3) + "-3)";
-    if (r < 0.45) return "(" + (n - 2) + "+2)";
-    if (r < 0.6) return "(" + n * 2 + "//2)";
-    return num;
-  });
-}
+app.use(cors());
 
-function injectJunk(code) {
-  const lines = code.split("\n");
-  const result = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    result.push(line);
-    const t = line.trim();
-    const unsafe =
-      /function\s*$/.test(t) ||
-      /then\s*$/.test(t) ||
-      /else\s*$/.test(t) ||
-      /do\s*$/.test(t) ||
-      /repeat\s*$/.test(t) ||
-      /,\s*$/.test(t) ||
-      /\(\s*$/.test(t) ||
-      /\{\s*$/.test(t) ||
-      /=\s*$/.test(t) ||
-      /\.\.\s*$/.test(t) ||
-      /and\s*$/.test(t) ||
-      /or\s*$/.test(t);
-    if (t.length > 20 && !unsafe && Math.random() > 0.82) {
-      result.push("local " + ln() + "=(nil);");
-    }
-  }
-  return result.join("\n");
-}
 
-function encryptStrings(code, strings) {
-  const key = crypto.randomBytes(6).toString("hex");
-  const decName = ln();
-  const keyBytes = Buffer.from(key, "utf8");
 
-  let decoder =
-    "local " +
-    decName +
-    "=function(t,k)" +
-    "local r={};" +
-    "for i=1,#t do " +
-    "local b=string.byte(k,(i-1)%#k+1);" +
-    "r[i]=string.char(bit32.bxor(t[i],b)) " +
-    "end;" +
-    "return table.concat(r) " +
-    "end;";
+// Aumentamos el límite de JSON y URL Encoded a 50mb para soportar scripts gigantes
 
-  const rebuilt = [];
-  for (let i = 0; i < strings.length; i++) {
-    const raw = strings[i];
-    if (raw.startsWith("[") || raw.length < 4) {
-      rebuilt.push(raw);
-      continue;
-    }
-    let content = raw.slice(1, -1);
-    try {
-      content = content
-        .replace(/\\n/g, "\n")
-        .replace(/\\t/g, "\t")
-        .replace(/\\r/g, "\r")
-        .replace(/\\\\/g, "\\")
-        .replace(/\\'/g, "'")
-        .replace(/\\"/g, '"');
-    } catch (_) {}
+app.use(express.json({ limit: '50mb' }));
 
-    if (
-      content.length > 4000 ||
-      /^rbxassetid:\/\//i.test(content) ||
-      /^https?:\/\//i.test(content) ||
-      /sirius\.menu/i.test(content) ||
-      /raw\.githubusercontent/i.test(content) ||
-      (/^[A-Za-z0-9_\-]{3,40}$/.test(content) && content.length < 24)
-    ) {
-      rebuilt.push(raw);
-      continue;
-    }
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-    const encrypted = [];
-    for (let j = 0; j < content.length; j++) {
-      encrypted.push(content.charCodeAt(j) ^ keyBytes[j % keyBytes.length]);
-    }
-    const bytesStr = "{" + encrypted.join(",") + "}";
-    rebuilt.push(decName + "(" + bytesStr + ',"' + key + '")');
+
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+
+
+const limiter = rateLimit({
+
+  windowMs: 15 * 60 * 1000,
+
+  max: 300
+
+});
+
+app.use('/api/', limiter);
+
+
+
+// ====================== DATA ======================
+
+function loadData() {
+
+  if (!fs.existsSync(DATA_FILE)) {
+
+    const initial = {
+
+      scripts: [],
+
+      keys: [],
+
+      visits: [],
+
+      totalVisits: 0
+
+    };
+
+    fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2));
+
   }
 
-  let out = code;
-  for (let i = strings.length - 1; i >= 0; i--) {
-    out = out.split("___S" + i + "___").join(rebuilt[i]);
-  }
-  return { code: out, decoder };
+  return JSON.parse(fs.readFileSync(DATA_FILE));
+
 }
 
-function toSingleLine(code) {
-  return code
-    .replace(/\r?\n|\r/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+
+
+function saveData(data) {
+
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+
 }
 
-function buildAntiTamper() {
-  const stop = 'error("QyrexObf: environment blocked",0)';
 
-  return `
-do local function __ikg_fail(r) ${stop} end local function __keyforge_luraph_check() local p={[1642754488]=25,[3105969070]=50,[48342080]=50,[793184576]=25} local q,r=getfenv(),next local t=nil while true do t,Value=r(q,t) if t==nil then break end if type(t)=='string' and #t<20 then local u,v,w,x=2166136261,{string.byte(t,1,-1)},r while true do local y x,y=r(v,x) if x==nil then break end local z=bit32.bxor(u,y) if z>=134217728 then local A=z%65536 local B,C=(z-A)/65536,A*403 u=(B*403+A*256)%65536*65536+C else u=z*16777619%4294967296 end end end end end pcall(__keyforge_luraph_check) if type(string)~="table" or type(math)~="table" or type(table)~="table" then __ikg_fail("prim") end if type(string.byte)~="function" or string.byte("A")~=65 then __ikg_fail("byte") end if type(math.floor)~="function" or math.floor(3.9)~=3 or math.floor(math.pi)~=3 then __ikg_fail("floor") end if bit32 and type(bit32.bxor)=="function" and bit32.bxor(85,170)~=255 then __ikg_fail("bxor") end if type(game)==type({}) then __ikg_fail("game_table") end if type(typeof)=="function" and typeof(game)=="table" then __ikg_fail("typeof_game") end do local ok,mt=pcall(getmetatable,game) if ok and type(mt)==type({}) then __ikg_fail("mt_game") end end local ZERO="00000000-0000-0000-0000-000000000000" local okJ,jobId=pcall(function() return game.JobId end) if okJ and jobId==ZERO then __ikg_fail("jobid") end local okP,placeId=pcall(function() return game.PlaceId end) if okP and placeId==8916037983 then __ikg_fail("place") end local okG,gameId=pcall(function() return game.GameId end) if okG and gameId==8916037983 then __ikg_fail("gameid") end local okPl,Players=pcall(function() return game:GetService("Players") end) if not okPl or not Players then __ikg_fail("players") end local LP=Players and Players.LocalPlayer if not LP then __ikg_fail("lp") end if LP then local okU,uid=pcall(function() return LP.UserId end) if okU and uid==123456789 then __ikg_fail("uid") end local okN,nm=pcall(function() return LP.Name end) if okN and nm=="vole7vin" then __ikg_fail("name") end end local okS,Stats=pcall(function() return game:GetService("Stats") end) if okS and Stats then local okNet,Net=pcall(function() return Stats.Network end) if okNet and Net then local okSSI,SSI=pcall(function() return Net.ServerStatsItem end) if okSSI and SSI then local okDP,DP=pcall(function() return SSI["Data Ping"] end) if okDP and DP then local okPV,pv=pcall(function() return DP:GetValue() end) if okPV and (pv==nil or pv=="" or tonumber(pv)==0 or math.floor(tonumber(pv) or 0)==0) then __ikg_fail("pingval") end end end end end pcall(function() local CG=game:GetService("CoreGui") if CG and not CG:FindFirstChild("RobloxGui") then __ikg_fail("robloxgui") end end) if _G.lune or _G.lute or _G.wally or _G.rojo or _G.selene or _G.darklua then __ikg_fail("tool") end if _G.process and (_G.process.env or _G.process.platform or _G.process.exit) then __ikg_fail("process") end if _G.window or _G.document or _G.navigator or _G.localStorage then __ikg_fail("browser") end if _G.Buffer and _G.Buffer.from then __ikg_fail("nodebuf") end if _G.__dirname or _G.__filename then __ikg_fail("nodepath") end pcall(function() if package and type(package)=="table" and (rawget(package,"lune") or rawget(package,"lute") or rawget(package,"wally")) then __ikg_fail("package") end end) end
-`.trim();
+
+// ====================== API DE SCRIPTS (protegida) ======================
+
+function isBrowser(req) {
+
+  const ua = (req.headers['user-agent'] || '').toLowerCase();
+
+  return ua.includes('mozilla') || ua.includes('chrome') || ua.includes('safari') || ua.includes('firefox') || ua.includes('edge');
+
 }
 
-/**
- * Encapsula la totalidad del código Lua generado dentro de una secuencia de bytes cifrada.
- * SynCrypt no podrá leer sentencias AST estándar ya que todo estará empaquetado.
- */
-function wrapPayloadInByteLoader(payload) {
-  const key = crypto.randomBytes(8);
-  const buffer = Buffer.from(payload, "utf8");
-  const encryptedBytes = [];
 
-  for (let i = 0; i < buffer.length; i++) {
-    encryptedBytes.push(buffer[i] ^ key[i % key.length]);
-  }
 
-  const keyArr = "{" + Array.from(key).join(",") + "}";
-  const byteData = "{" + encryptedBytes.join(",") + "}";
+app.get('/api/script/:id', (req, res) => {
 
-  const v_data = ln();
-  const v_key = ln();
-  const v_out = ln();
-  const v_i = ln();
-  const v_b = ln();
-  const v_load = ln();
+  // Bloquear navegadores
 
-  return `local ${v_data}=${byteData} local ${v_key}=${keyArr} local ${v_out}={} for ${v_i}=1,#${v_data} do local ${v_b}=bit32.bxor(${v_data}[${v_i}],${v_key}[(${v_i}-1)%#${v_key}+1]) ${v_out}[${v_i}]=string.char(${v_b}) end local ${v_load}=assert(loadstring or load)(table.concat(${v_out})) return ${v_load}()`;
-}
+  if (isBrowser(req)) {
 
-function obfuscateLua(source) {
-  let code = String(source || "").trim();
-  if (!code) throw new Error("Empty script");
+    return res.status(403).json({
 
-  const extracted = extractStrings(code);
-  code = stripComments(extracted.code);
-  const strings = extracted.strings;
+      error: "Endpoint bloqueado",
 
-  // Transformaciones de código
-  code = renameLocals(code);
-  code = obfuscateNumbers(code);
-  code = injectJunk(code);
+      message: "Este endpoint solo puede ser usado por ejecutores autorizados. QyrexApi"
 
-  const prot = encryptStrings(code, strings);
-  code = prot.code;
-  const decoder = prot.decoder || "";
-
-  // Fusionamos Anti-Tamper + Decodificador + Código en un solo bloque
-  let rawPayload = buildAntiTamper() + " " + decoder + " " + code;
-  rawPayload = toSingleLine(rawPayload);
-
-  // Encriptación total a Bytecode Dynamic Loader
-  const finalObfuscatedPayload = wrapPayloadInByteLoader(rawPayload);
-
-  return "-- Protect by QyrexObf\n" + finalObfuscatedPayload;
-}
-
-app.post("/api/obfuscate", function (req, res) {
-  try {
-    const code = req.body && req.body.code;
-
-    if (typeof code !== "string" || !code.trim()) {
-      return res.status(400).json({ error: "No se recibio ningun script Lua." });
-    }
-    if (code.length > 600000) {
-      return res.status(400).json({ error: "Script demasiado grande (max ~600KB)." });
-    }
-
-    console.log("[Obfuscate] Processing max security single-line byte loader, size=" + code.length);
-
-    const result = obfuscateLua(code);
-
-    res.json({
-      success: true,
-      code: result,
-      originalSize: code.length,
-      outputSize: result.length,
-      compressionRatio: ((1 - result.length / Math.max(code.length, 1)) * 100).toFixed(2) + "%",
     });
-  } catch (err) {
-    console.error("[Error]", err);
-    res.status(500).json({ error: "Error procesando: " + (err.message || "unknown") });
+
   }
-});
 
-app.get("/api/health", function (req, res) {
-  res.json({ ok: true, version: "QyrexObf-v2-byteloader", maxSize: "600KB" });
-});
 
-app.get("/", function (req, res) {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
 
-app.use(express.static(path.join(__dirname, "public")));
+  const data = loadData();
 
-module.exports = app;
+  const script = data.scripts.find(s => s.id === req.params.id);
 
-if (require.main === module) {
-  app.listen(PORT, "0.0.0.0", function () {
-    console.log("QyrexObf Server running on port " + PORT);
+  if (!script) return res.status(404).json({ error: "Script no encontrado" });
+
+
+
+  const key = req.headers['x-api-key'] || req.query.key;
+
+  if (!key || !data.keys.find(k => k.key === key && k.active)) {
+
+    return res.status(401).json({ error: "API Key inválida o expirada" });
+
+  }
+
+
+
+  // Contar visita
+
+  script.visits = (script.visits || 0) + 1;
+
+  data.totalVisits = (data.totalVisits || 0) + 1;
+
+  data.visits.push({
+
+    scriptId: script.id,
+
+    time: new Date().toISOString(),
+
+    key: key.slice(0, 8) + "..."
+
   });
-}
+
+  if (data.visits.length > 500) data.visits = data.visits.slice(-500);
+
+  saveData(data);
+
+
+
+  res.set('Content-Type', 'text/plain');
+
+  res.send(script.code);
+
+});
+
+
+
+// ====================== DASHBOARD - SCRIPTS ======================
+
+app.get('/api/admin/scripts', (req, res) => {
+
+  const data = loadData();
+
+  res.json(data.scripts);
+
+});
+
+
+
+app.post('/api/admin/scripts', (req, res) => {
+
+  const data = loadData();
+
+  const id = crypto.randomBytes(4).toString('hex');
+
+  const newScript = {
+
+    id,
+
+    name: req.body.name || "Nuevo Script",
+
+    description: req.body.description || "",
+
+    code: req.body.code || "",
+
+    visits: 0,
+
+    createdAt: new Date().toISOString()
+
+  };
+
+  data.scripts.push(newScript);
+
+  saveData(data);
+
+  res.json(newScript);
+
+});
+
+
+
+app.put('/api/admin/scripts/:id', (req, res) => {
+
+  const data = loadData();
+
+  const script = data.scripts.find(s => s.id === req.params.id);
+
+  if (!script) return res.status(404).json({ error: "No encontrado" });
+
+
+
+  script.name = req.body.name ?? script.name;
+
+  script.description = req.body.description ?? script.description;
+
+  script.code = req.body.code ?? script.code;
+
+  saveData(data);
+
+  res.json(script);
+
+});
+
+
+
+app.delete('/api/admin/scripts/:id', (req, res) => {
+
+  const data = loadData();
+
+  data.scripts = data.scripts.filter(s => s.id !== req.params.id);
+
+  saveData(data);
+
+  res.json({ success: true });
+
+});
+
+
+
+// ====================== KEYS ======================
+
+app.get('/api/admin/keys', (req, res) => {
+
+  const data = loadData();
+
+  res.json(data.keys);
+
+});
+
+
+
+app.post('/api/admin/keys', (req, res) => {
+
+  const data = loadData();
+
+  const key = "QYREXAPI-" + crypto.randomBytes(8).toString('hex').toUpperCase();
+
+  const newKey = {
+
+    key,
+
+    active: true,
+
+    createdAt: new Date().toISOString(),
+
+    note: req.body.note || "Generada desde QyrexApi"
+
+  };
+
+  data.keys.push(newKey);
+
+  saveData(data);
+
+  res.json(newKey);
+
+});
+
+
+
+app.delete('/api/admin/keys/:key', (req, res) => {
+
+  const data = loadData();
+
+  data.keys = data.keys.filter(k => k.key !== req.params.key);
+
+  saveData(data);
+
+  res.json({ success: true });
+
+});
+
+
+
+// ====================== STATS ======================
+
+app.get('/api/admin/stats', (req, res) => {
+
+  const data = loadData();
+
+  res.json({
+
+    totalScripts: data.scripts.length,
+
+    totalKeys: data.keys.length,
+
+    activeKeys: data.keys.filter(k => k.active).length,
+
+    totalVisits: data.totalVisits || 0,
+
+    recentVisits: data.visits.slice(-30).reverse()
+
+  });
+
+});
+
+
+
+// ====================== FRONTEND ======================
+
+app.get('*', (req, res) => {
+
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+
+});
+
+
+
+app.listen(PORT, () => {
+
+  console.log(`QyrexApi corriendo en puerto ${PORT}`);
+
+}); 
+
