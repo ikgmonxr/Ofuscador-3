@@ -101,6 +101,11 @@ body::before {
     letter-spacing: 3px;
     font-weight: 700;
 }
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
 .status-badge {
     display: flex;
     align-items: center;
@@ -123,11 +128,125 @@ body::before {
     box-shadow: 0 0 12px #00ffaa;
 }
 
+/* USER AUTH NAV BTNS */
+.auth-btn {
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.2s;
+}
+#loginBtn {
+    background: transparent;
+    border: 1px solid rgba(0, 242, 254, 0.4);
+    color: #00f2fe;
+}
+#loginBtn:hover {
+    background: rgba(0, 242, 254, 0.1);
+}
+#userPanelBtn {
+    background: rgba(0, 242, 254, 0.15);
+    border: 1px solid #00f2fe;
+    color: #fff;
+    display: none;
+}
+
+/* MODAL AUTH */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(3, 6, 13, 0.85);
+    backdrop-filter: blur(8px);
+    display: none;
+    place-items: center;
+    z-index: 1000;
+}
+.modal-card {
+    width: min(400px, 90%);
+    background: #070d18;
+    border: 1px solid rgba(0, 242, 254, 0.3);
+    border-radius: 16px;
+    padding: 30px;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.8);
+    position: relative;
+}
+.modal-card h2 {
+    margin-top: 0;
+    font-size: 20px;
+    color: #fff;
+    text-align: center;
+}
+.modal-card input {
+    width: 100%;
+    padding: 12px 15px;
+    margin-bottom: 12px;
+    background: #03070f;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 13px;
+    outline: none;
+}
+.modal-card input:focus {
+    border-color: #00f2fe;
+}
+.modal-card button {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #00f2fe, #4facfe);
+    border: 0;
+    border-radius: 8px;
+    font-weight: 900;
+    color: #03060d;
+    cursor: pointer;
+    margin-top: 5px;
+}
+.close-modal {
+    position: absolute;
+    top: 15px;
+    right: 18px;
+    background: none;
+    border: none;
+    color: #8899ac;
+    font-size: 18px;
+    cursor: pointer;
+}
+.modal-switch {
+    text-align: center;
+    margin-top: 15px;
+    font-size: 11px;
+    color: #8899ac;
+}
+.modal-switch span {
+    color: #00f2fe;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+/* LIMIT COUNTER BADGE */
+.usage-badge {
+    width: min(1180px, 92%);
+    margin: 0 auto 15px;
+    padding: 10px 16px;
+    background: rgba(0, 242, 254, 0.05);
+    border: 1px dashed rgba(0, 242, 254, 0.3);
+    border-radius: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: #a0b2c6;
+}
+.usage-badge strong {
+    color: #00f2fe;
+}
+
 /* HERO */
 .hero {
     width: min(900px, 92%);
     margin: auto;
-    padding: 60px 0 40px;
+    padding: 40px 0 30px;
     text-align: center;
 }
 .tag {
@@ -466,11 +585,38 @@ footer {
             <small>OBFUSCATOR v2.5</small>
         </div>
     </div>
-    <div class="status-badge">
-        <span class="status-dot"></span>
-        ROBLOX & LUA 5.1 READY
+    <div class="nav-right">
+        <div class="status-badge">
+            <span class="status-dot"></span>
+            ROBLOX & LUA 5.1 READY
+        </div>
+        <button class="auth-btn" id="loginBtn">ACCEDER / REGISTRARSE</button>
+        <button class="auth-btn" id="userPanelBtn">👤 Mi Cuenta</button>
     </div>
 </header>
+
+<!-- MODAL DE LOGIN / REGISTRO -->
+<div class="modal-overlay" id="authModal">
+    <div class="modal-card">
+        <button class="close-modal" id="closeModal">&times;</button>
+        <h2 id="modalTitle">Iniciar Sesión</h2>
+        <form id="authForm">
+            <input type="text" id="usernameInput" placeholder="Nombre de usuario" required>
+            <input type="email" id="emailInput" placeholder="Correo electrónico (Gmail VIP)" required>
+            <input type="password" id="passwordInput" placeholder="Contraseña" required>
+            <button type="submit" id="authSubmitBtn">Entrar</button>
+        </form>
+        <div class="modal-switch">
+            <p id="switchText">¿No tienes cuenta? <span id="toggleMode">Regístrate aquí</span></p>
+        </div>
+    </div>
+</div>
+
+<!-- BARRA DE USO / LÍMITE DIARIO -->
+<div class="usage-badge" id="usageBadge">
+    <span>Estado de Sesión: <strong id="sessionStatusText">Modo Invitado (Límite: 10 ofuscaciones/día)</strong></span>
+    <span id="limitCounterText">Usos hoy: <strong>0 / 10</strong></span>
+</div>
 
 <section class="hero">
     <div class="tag">✦ NEXT-GEN PROTECTION SYSTEM</div>
@@ -622,6 +768,10 @@ footer {
 </footer>
 
 <script>
+// Sistema de Control de Autenticación y Límites (Mock Local / Base)
+let currentUser = JSON.parse(localStorage.getItem("qyrex_user")) || null;
+let userUsages = Number(localStorage.getItem("qyrex_uses")) || 0;
+
 const input = document.getElementById("input");
 const output = document.getElementById("output");
 const level = document.getElementById("level");
@@ -637,6 +787,85 @@ const status = document.getElementById("status");
 const result = document.getElementById("result");
 const statsContainer = document.getElementById("statsContainer");
 const warningBox = document.getElementById("warningBox");
+
+// Elementos de Auth y Límites
+const loginBtn = document.getElementById("loginBtn");
+const userPanelBtn = document.getElementById("userPanelBtn");
+const authModal = document.getElementById("authModal");
+const closeModal = document.getElementById("closeModal");
+const authForm = document.getElementById("authForm");
+const modalTitle = document.getElementById("modalTitle");
+const authSubmitBtn = document.getElementById("authSubmitBtn");
+const toggleMode = document.getElementById("toggleMode");
+const switchText = document.getElementById("switchText");
+const usernameInput = document.getElementById("usernameInput");
+const emailInput = document.getElementById("emailInput");
+const passwordInput = document.getElementById("passwordInput");
+const sessionStatusText = document.getElementById("sessionStatusText");
+const limitCounterText = document.getElementById("limitCounterText");
+
+let isRegisterMode = false;
+
+function updateAuthUI() {
+    if (currentUser) {
+        loginBtn.style.display = "none";
+        userPanelBtn.style.display = "block";
+        if (currentUser.isVip) {
+            sessionStatusText.innerHTML = `Usuario VIP [${currentUser.email}] — <span style="color:#00ffaa;">Ilimitado</span>`;
+            limitCounterText.innerHTML = `Usos VIP: <strong>Ilimitados (Gmail Registrado)</strong>`;
+        } else {
+            sessionStatusText.innerHTML = `Usuario: <strong>${currentUser.username}</strong>`;
+            limitCounterText.innerHTML = `Usos hoy: <strong>${userUsages} / 10</strong>`;
+        }
+    } else {
+        loginBtn.style.display = "block";
+        userPanelBtn.style.display = "none";
+        sessionStatusText.innerHTML = `Modo Invitado (Límite: 10 ofuscaciones/día)`;
+        limitCounterText.innerHTML = `Usos hoy: <strong>${userUsages} / 10</strong>`;
+    }
+}
+updateAuthUI();
+
+loginBtn.addEventListener("click", () => { authModal.style.display = "grid"; });
+userPanelBtn.addEventListener("click", () => {
+    if(confirm("¿Deseas cerrar sesión?")) {
+        localStorage.removeItem("qyrex_user");
+        currentUser = null;
+        updateAuthUI();
+    }
+});
+closeModal.addEventListener("click", () => { authModal.style.display = "none"; });
+
+toggleMode.addEventListener("click", () => {
+    isRegisterMode = !isRegisterMode;
+    if(isRegisterMode) {
+        modalTitle.textContent = "Registro de Usuario / VIP";
+        authSubmitBtn.textContent = "Registrarse";
+        switchText.innerHTML = `¿Ya tienes cuenta? <span id="toggleMode">Inicia sesión</span>`;
+    } else {
+        modalTitle.textContent = "Iniciar Sesión";
+        authSubmitBtn.textContent = "Entrar";
+        switchText.innerHTML = `¿No tienes cuenta? <span id="toggleMode">Regístrate aquí</span>`;
+    }
+    // Re-vincular evento al span dinámico
+    document.getElementById("toggleMode").addEventListener("click", arguments.callee);
+});
+
+authForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const username = usernameInput.value.trim();
+    const email = emailInput.value.trim();
+    
+    // Validar si es Gmail para rol VIP (ej: @gmail.com)
+    const isVip = email.endsWith("@gmail.com");
+
+    currentUser = { username, email, isVip };
+    localStorage.setItem("qyrex_user", JSON.stringify(currentUser));
+    
+    authModal.style.display = "none";
+    updateAuthUI();
+    alert(isVip ? "¡Registro VIP exitoso! Tienes ofuscaciones ilimitadas con tu Gmail." : "¡Registro exitoso! Se te asignaron 10 ofuscaciones diarias.");
+});
 
 function counters() {
     const inputLen = input.value.length;
@@ -663,7 +892,6 @@ clear.addEventListener("click", () => {
     counters();
 });
 
-// Cargar archivo
 loadFileBtn.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", (e) => {
     const file = e.target.files[0];
@@ -676,7 +904,6 @@ fileInput.addEventListener("change", (e) => {
     reader.readAsText(file);
 });
 
-// Descargar código obfuscado
 downloadBtn.addEventListener("click", () => {
     if (!output.value) return;
     const blob = new Blob([output.value], { type: "text/plain" });
@@ -707,6 +934,15 @@ button.addEventListener("click", async () => {
         return;
     }
     
+    // Validación de límites para usuarios normales / invitados
+    if (!currentUser || !currentUser.isVip) {
+        if (userUsages >= 10) {
+            status.textContent = "¡Límite diario alcanzado (10/10)! Regístrate con un Gmail VIP para uso ilimitado.";
+            alert("Has alcanzado tus 10 ofuscaciones gratuitas por hoy. ¡Regístrate con tu cuenta de Gmail para convertirte en usuario VIP y ofuscar sin límites!");
+            return;
+        }
+    }
+    
     const startTime = performance.now();
     button.disabled = true;
     button.textContent = "◌ PROCESANDO...";
@@ -726,7 +962,8 @@ button.addEventListener("click", async () => {
                 encryptStrings: document.getElementById("encryptStrings").checked,
                 renameVars: document.getElementById("renameVars").checked,
                 vmProtect: document.getElementById("vmProtect").checked,
-                preset: document.getElementById("preset").value
+                preset: document.getElementById("preset").value,
+                user: currentUser ? currentUser.email : "guest"
             })
         });
         
@@ -739,12 +976,18 @@ button.addEventListener("click", async () => {
             throw new Error(data.error || "Obfuscación fallida");
         }
         
+        // Incrementar uso si no es VIP
+        if (!currentUser || !currentUser.isVip) {
+            userUsages++;
+            localStorage.setItem("qyrex_uses", userUsages);
+            limitCounterText.innerHTML = `Usos hoy: <strong>${userUsages} / 10</strong>`;
+        }
+        
         output.value = data.code;
         counters();
         result.textContent = "PROTEGIDO";
         status.textContent = "✓ Completado con QyrexObf";
         
-        // Mostrar estadísticas
         statsContainer.style.display = "grid";
         document.getElementById("compressionStat").textContent = data.compressionRatio || "142%";
         document.getElementById("timeStat").textContent = processingTime + "ms";
