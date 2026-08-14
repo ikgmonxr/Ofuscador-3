@@ -1,15 +1,11 @@
 {
-  "name": "qyrex-obf-local",
+  "name": "qyrex-obf",
   "version": "1.0.0",
-  "private": true,
-  "description": "Local Luau/Lua source minifier and string obfuscator",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node server.js"
   },
   "engines": {
     "node": ">=18"
-  },
-  "dependencies": {}
+  }
 }
