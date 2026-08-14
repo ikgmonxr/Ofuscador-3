@@ -616,7 +616,7 @@ footer {
         <h2 id="modalTitle">Iniciar Sesión</h2>
         <form id="authForm">
             <input type="text" id="usernameInput" placeholder="Nombre de usuario" required>
-            <input type="email" id="emailInput" placeholder="Correo electrónico (Gmail VIP)" required>
+            <input type="email" id="emailInput" placeholder="Correo electrónico" required>
             <input type="password" id="passwordInput" placeholder="Contraseña" required>
             <button type="submit" id="authSubmitBtn">Entrar</button>
         </form>
@@ -628,8 +628,8 @@ footer {
 
 <!-- BARRA DE USO / LÍMITE DIARIO -->
 <div class="usage-badge" id="usageBadge">
-    <span>Estado de Sesión: <strong id="sessionStatusText">Modo Invitado (Límite: 10 ofuscaciones/día)</strong></span>
-    <span id="limitCounterText">Usos hoy: <strong>0 / 10</strong></span>
+    <span>Estado de Sesión: <strong id="sessionStatusText">Modo Invitado (Límite: 30 ofuscaciones/día)</strong></span>
+    <span id="limitCounterText">Usos hoy: <strong>0 / 30</strong></span>
 </div>
 
 <section class="hero">
@@ -782,14 +782,21 @@ footer {
 </footer>
 
 <script>
-// Lista de Gmailes o correos VIP autorizados directamente en el frontend (o para validar con tu backend)
+// ==========================================
+// AQUÍ AGREGAS LOS GMAIL VIP MANUALMENTE:
+// ==========================================
 const vipEmailsList = [
     "tucorreoadmin@gmail.com",
-    "vip_friend@gmail.com"
+    "cliente_vip1@gmail.com",
+    "cliente_vip2@gmail.com"
 ];
 
 let currentUser = JSON.parse(localStorage.getItem("qyrex_user")) || null;
 let userUsages = Number(localStorage.getItem("qyrex_uses")) || 0;
+
+// Límites configurados
+const FREE_LIMIT = 30; // Límite para usuarios normales / invitados
+const VIP_LIMIT = 100; // Límite para usuarios VIP (puedes cambiarlo)
 
 const input = document.getElementById("input");
 const output = document.getElementById("output");
@@ -807,7 +814,6 @@ const result = document.getElementById("result");
 const statsContainer = document.getElementById("statsContainer");
 const warningBox = document.getElementById("warningBox");
 
-// Elementos de Auth y Límites
 const loginBtn = document.getElementById("loginBtn");
 const userPanelBtn = document.getElementById("userPanelBtn");
 const authModal = document.getElementById("authModal");
@@ -826,21 +832,22 @@ const limitCounterText = document.getElementById("limitCounterText");
 let isRegisterMode = false;
 
 function updateAuthUI() {
+    const currentLimit = currentUser && currentUser.isVip ? VIP_LIMIT : FREE_LIMIT;
     if (currentUser) {
         loginBtn.style.display = "none";
         userPanelBtn.style.display = "block";
         if (currentUser.isVip) {
-            sessionStatusText.innerHTML = `Usuario VIP [${currentUser.email}] — <span style="color:#00ffaa;">Ilimitado</span>`;
-            limitCounterText.innerHTML = `Usos VIP: <strong>Ilimitados (Gmail VIP Registrado)</strong>`;
+            sessionStatusText.innerHTML = `Usuario VIP [${currentUser.email}]`;
+            limitCounterText.innerHTML = `Usos VIP hoy: <strong>${userUsages} / ${VIP_LIMIT}</strong>`;
         } else {
             sessionStatusText.innerHTML = `Usuario: <strong>${currentUser.username}</strong>`;
-            limitCounterText.innerHTML = `Usos hoy: <strong>${userUsages} / 10</strong>`;
+            limitCounterText.innerHTML = `Usos hoy: <strong>${userUsages} / ${FREE_LIMIT}</strong>`;
         }
     } else {
         loginBtn.style.display = "block";
         userPanelBtn.style.display = "none";
-        sessionStatusText.innerHTML = `Modo Invitado (Límite: 10 ofuscaciones/día)`;
-        limitCounterText.innerHTML = `Usos hoy: <strong>${userUsages} / 10</strong>`;
+        sessionStatusText.innerHTML = `Modo Invitado (Límite: ${FREE_LIMIT} ofuscaciones/día)`;
+        limitCounterText.innerHTML = `Usos hoy: <strong>${userUsages} / ${FREE_LIMIT}</strong>`;
     }
 }
 updateAuthUI();
@@ -850,6 +857,8 @@ userPanelBtn.addEventListener("click", () => {
     if(confirm("¿Deseas cerrar sesión?")) {
         localStorage.removeItem("qyrex_user");
         currentUser = null;
+        userUsages = 0; // Opcional: resetear al cerrar sesión
+        localStorage.setItem("qyrex_uses", userUsages);
         updateAuthUI();
     }
 });
@@ -858,7 +867,7 @@ closeModal.addEventListener("click", () => { authModal.style.display = "none"; }
 toggleMode.addEventListener("click", () => {
     isRegisterMode = !isRegisterMode;
     if(isRegisterMode) {
-        modalTitle.textContent = "Registro de Usuario / VIP";
+        modalTitle.textContent = "Registro";
         authSubmitBtn.textContent = "Registrarse";
         switchText.innerHTML = `¿Ya tienes cuenta? <span id="toggleMode">Inicia sesión</span>`;
     } else {
@@ -873,15 +882,15 @@ authForm.addEventListener("submit", (e) => {
     const username = usernameInput.value.trim();
     const email = emailInput.value.trim().toLowerCase();
     
-    // AQUÍ PUEDES AGREGAR TUS CORREOS VIP O VALIDAR SI TERMINA EN @gmail.com (O ESTÁ EN LA LISTA vipEmailsList)
-    const isVip = vipEmailsList.includes(email) || email.endsWith("@gmail.com");
+    // Verifica si el correo está en tu lista manual de VIPs
+    const isVip = vipEmailsList.includes(email);
 
     currentUser = { username, email, isVip };
     localStorage.setItem("qyrex_user", JSON.stringify(currentUser));
     
     authModal.style.display = "none";
     updateAuthUI();
-    alert(isVip ? "¡Registro VIP exitoso! Tienes ofuscaciones ilimitadas con tu Gmail." : "¡Registro exitoso! Se te asignaron 10 ofuscaciones diarias.");
+    alert(isVip ? "¡Bienvenido VIP! Tu cuenta ha sido reconocida con límite ampliado." : "¡Registro exitoso! Tienes 30 ofuscaciones diarias.");
 });
 
 function counters() {
@@ -951,13 +960,12 @@ button.addEventListener("click", async () => {
         return;
     }
     
-    // Validación de límites para usuarios normales / invitados
-    if (!currentUser || !currentUser.isVip) {
-        if (userUsages >= 10) {
-            status.textContent = "¡Límite diario alcanzado (10/10)! Regístrate con un Gmail VIP para uso ilimitado.";
-            alert("Has alcanzado tus 10 ofuscaciones gratuitas por hoy. ¡Regístrate con tu cuenta de Gmail para convertirte en usuario VIP y ofuscar sin límites!");
-            return;
-        }
+    // Validación de límites según el tipo de usuario (VIP o Normal)
+    const activeLimit = currentUser && currentUser.isVip ? VIP_LIMIT : FREE_LIMIT;
+    if (userUsages >= activeLimit) {
+        status.textContent = `¡Límite diario alcanzado (${userUsages}/${activeLimit})!`;
+        alert(`Has alcanzado tu límite de ${activeLimit} ofuscaciones por hoy.`);
+        return;
     }
     
     const startTime = performance.now();
@@ -993,12 +1001,10 @@ button.addEventListener("click", async () => {
             throw new Error(data.error || "Obfuscación fallida");
         }
         
-        // Incrementar uso si no es VIP
-        if (!currentUser || !currentUser.isVip) {
-            userUsages++;
-            localStorage.setItem("qyrex_uses", userUsages);
-            limitCounterText.innerHTML = `Usos hoy: <strong>${userUsages} / 10</strong>`;
-        }
+        // Incrementar uso
+        userUsages++;
+        localStorage.setItem("qyrex_uses", userUsages);
+        updateAuthUI();
         
         output.value = data.code;
         counters();
