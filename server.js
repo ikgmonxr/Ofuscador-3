@@ -1,5 +1,5 @@
 /**
- * IKGONAVI Obfuscator v2 — Big Scripts + Anti-Tamper fusion
+ * IKGONAVI Obfuscator v2 — Big Scripts + Anti-Tamper fusion + Keyforge/Luarph Engine
  * Fixed: string protection, safer rename, Luau-safe ops, optional anti-tamper inject
  */
 const express = require("express");
@@ -167,6 +167,7 @@ function renameLocals(code) {
 function obfuscateNumbers(code) {
   return code.replace(/\b(\d{2,4})\b/g, (match, num) => {
     const n = parseInt(num, 10);
+    // skip asset-like and small constants used by UI
     if (n < 16 || n > 9000) return num;
     const r = Math.random();
     if (r < 0.25) return "(" + (n + 3) + "-3)";
@@ -246,7 +247,15 @@ function encryptStrings(code, strings, level) {
         .replace(/\\"/g, '"');
     } catch (_) {}
 
-    if (/^rbxassetid:\/\//i.test(content) || content.length > 4000) {
+    // Never encrypt URLs, asset ids, flags, or huge blobs (keeps Rayfield/HttpGet alive)
+    if (
+      content.length > 4000 ||
+      /^rbxassetid:\/\//i.test(content) ||
+      /^https?:\/\//i.test(content) ||
+      /sirius\.menu/i.test(content) ||
+      /raw\.githubusercontent/i.test(content) ||
+      /^[A-Za-z0-9_\-]{3,40}$/.test(content) && content.length < 24 // likely Flag names
+    ) {
       rebuilt.push(raw);
       continue;
     }
@@ -285,56 +294,100 @@ function buildAntiTamper(mode) {
     : 'pcall(function() local p=game:GetService("Players").LocalPlayer if p then p:Kick("Security") end end)';
 
   return `
--- IKGONAVI Anti-Tamper / Anti-Sandbox (fused from Aqua + common fingerprints)
+-- IKGONAVI Anti-Tamper v2 (Aqua fingerprints + Keyforge + Luraph + Catph VM)
 do
 	local function __ikg_fail(r)
 		` + stop + `
 	end
+
+	-- Keyforge & Luraph Anti-Beautify / Function Trap Engine Integrations
+	local function __keyforge_luraph_check()
+		local p = { [1642754488]=25, [3105969070]=50, [48342080]=50, [793184576]=25 }
+		local q, r = getfenv(), next
+		local t = nil
+		while true do
+			t, Value = r(q, t)
+			if t == nil then break end
+			if type(t) == 'string' and #t < 20 then
+				local u, v, w, x = 2166136261, { string.byte(t, 1, -1) }, r
+				while true do
+					local y
+					x, y = r(v, x)
+					if x == nil then break end
+					local z = bit32.bxor(u, y)
+					if z >= 134217728 then
+						local A = z % 65536
+						local B, C = (z - A) / 65536, A * 403
+						u = (B * 403 + A * 256) % 65536 * 65536 + C
+					else
+						u = z * 16777619 % 4294967296
+					end
+				end
+			end
+		end
+	end
+	pcall(__keyforge_luraph_check)
+
+	-- primitives
 	if type(string)~="table" or type(math)~="table" or type(table)~="table" then __ikg_fail("prim") end
 	if type(string.byte)~="function" or string.byte("A")~=65 then __ikg_fail("byte") end
-	if type(math.floor)~="function" or math.floor(3.9)~=3 then __ikg_fail("floor") end
-	if math.floor(math.pi)~=3 then __ikg_fail("pi") end
+	if type(math.floor)~="function" or math.floor(3.9)~=3 or math.floor(math.pi)~=3 then __ikg_fail("floor") end
 	if bit32 and type(bit32.bxor)=="function" and bit32.bxor(85,170)~=255 then __ikg_fail("bxor") end
+	-- game identity
 	if type(game)==type({}) then __ikg_fail("game_table") end
 	if type(typeof)=="function" and typeof(game)=="table" then __ikg_fail("typeof_game") end
-	local okMt, mt = pcall(getmetatable, game)
-	if okMt and type(mt)==type({}) then __ikg_fail("mt_game") end
+	do local ok,mt=pcall(getmetatable,game) if ok and type(mt)==type({}) then __ikg_fail("mt_game") end end
+	-- sandbox fingerprints (Aqua)
 	local ZERO="00000000-0000-0000-0000-000000000000"
-	local okJ, jobId = pcall(function() return game.JobId end)
+	local okJ,jobId=pcall(function() return game.JobId end)
 	if okJ and jobId==ZERO then __ikg_fail("jobid") end
-	local okP, placeId = pcall(function() return game.PlaceId end)
+	local okP,placeId=pcall(function() return game.PlaceId end)
 	if okP and placeId==8916037983 then __ikg_fail("place") end
-	local okG, gameId = pcall(function() return game.GameId end)
+	local okG,gameId=pcall(function() return game.GameId end)
 	if okG and gameId==8916037983 then __ikg_fail("gameid") end
-	local okPl, Players = pcall(function() return game:GetService("Players") end)
+	local okPl,Players=pcall(function() return game:GetService("Players") end)
 	if not okPl or not Players then __ikg_fail("players") end
-	local LP = Players and Players.LocalPlayer
+	local LP=Players and Players.LocalPlayer
 	if not LP then __ikg_fail("lp") end
 	if LP then
-		local okU, uid = pcall(function() return LP.UserId end)
+		local okU,uid=pcall(function() return LP.UserId end)
 		if okU and uid==123456789 then __ikg_fail("uid") end
-		local okN, nm = pcall(function() return LP.Name end)
+		local okN,nm=pcall(function() return LP.Name end)
 		if okN and nm=="vole7vin" then __ikg_fail("name") end
 	end
-	local okS, Stats = pcall(function() return game:GetService("Stats") end)
-	if not okS or not Stats then __ikg_fail("stats") end
-	local okNet, Net = pcall(function() return Stats.Network end)
-	if not okNet or not Net then __ikg_fail("net") end
-	local okSSI, SSI = pcall(function() return Net.ServerStatsItem end)
-	if not okSSI or not SSI then __ikg_fail("ssi") end
-	local okDP, DP = pcall(function() return SSI["Data Ping"] end)
-	if not okDP or not DP then __ikg_fail("ping") end
-	local okPV, pv = pcall(function() return DP:GetValue() end)
-	if not okPV or pv==nil or pv=="" or tonumber(pv)==0 or math.floor(tonumber(pv) or 0)==0 then
-		__ikg_fail("pingval")
+	-- Stats / Data Ping (client only)
+	local okS,Stats=pcall(function() return game:GetService("Stats") end)
+	if okS and Stats then
+		local okNet,Net=pcall(function() return Stats.Network end)
+		if okNet and Net then
+			local okSSI,SSI=pcall(function() return Net.ServerStatsItem end)
+			if okSSI and SSI then
+				local okDP,DP=pcall(function() return SSI["Data Ping"] end)
+				if okDP and DP then
+					local okPV,pv=pcall(function() return DP:GetValue() end)
+					if okPV and (pv==nil or pv=="" or tonumber(pv)==0 or math.floor(tonumber(pv) or 0)==0) then
+						__ikg_fail("pingval")
+					end
+				end
+			end
+		end
 	end
-	local okCG, CG = pcall(function() return game:GetService("CoreGui") end)
-	if not okCG or not CG then __ikg_fail("coregui") end
-	local okRG, RG = pcall(function() return CG:FindFirstChild("RobloxGui") end)
-	if not okRG or not RG then __ikg_fail("robloxgui") end
-	if _G.lune or _G.lute or _G.wally or _G.rojo then __ikg_fail("tool") end
-	if _G.process and _G.process.env then __ikg_fail("process") end
-	if _G.window or _G.document or _G.navigator then __ikg_fail("browser") end
+	-- CoreGui presence (soft: only if accessible)
+	pcall(function()
+		local CG=game:GetService("CoreGui")
+		if CG and not CG:FindFirstChild("RobloxGui") then __ikg_fail("robloxgui") end
+	end)
+	-- offline tool / browser / node fingerprints (anti-sandbox everything, condensed)
+	if _G.lune or _G.lute or _G.wally or _G.rojo or _G.selene or _G.darklua then __ikg_fail("tool") end
+	if _G.process and (_G.process.env or _G.process.platform or _G.process.exit) then __ikg_fail("process") end
+	if _G.window or _G.document or _G.navigator or _G.localStorage then __ikg_fail("browser") end
+	if _G.Buffer and _G.Buffer.from then __ikg_fail("nodebuf") end
+	if _G.__dirname or _G.__filename then __ikg_fail("nodepath") end
+	pcall(function()
+		if package and type(package)=="table" and (rawget(package,"lune") or rawget(package,"lute") or rawget(package,"wally")) then
+			__ikg_fail("package")
+		end
+	end)
 end
 `.trim();
 }
@@ -359,7 +412,7 @@ function obfuscateLua(source, level, options) {
   const decoder = prot.decoder || "";
   code = minify(code);
 
-  let result = "-- Protected by IKGONAVI Obfuscator v2\n";
+  let result = "-- Protected by IKGONAVI Obfuscator v2 (Keyforge + Luarph Engine)\n";
   if (options.antiTamper) {
     result += buildAntiTamper(options.antiTamperMode || "soft") + "\n";
   }
@@ -406,7 +459,7 @@ app.post("/api/obfuscate", function (req, res) {
 });
 
 app.get("/api/health", function (req, res) {
-  res.json({ ok: true, version: "ikgonavi-v2-antitamper", maxSize: "600KB", levels: [1, 2, 3], antiTamper: true });
+  res.json({ ok: true, version: "ikgonavi-v2-antitamper-keyforge", maxSize: "600KB", levels: [1, 2, 3], antiTamper: true });
 });
 
 app.get("/", function (req, res) {
