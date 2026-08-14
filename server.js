@@ -8,6 +8,7 @@ const path = require("path");
 const PORT = Number(process.env.PORT || 3000);
 const MAX_SOURCE_BYTES = 500 * 1024;
 const indexCandidates = [path.join(__dirname, "index.html"), path.join(process.cwd(), "index.html")];
+const UNSUPPORTED_EXECUTOR_APIS = /\b(?:getgenv|hookmetamethod|checkcaller|loadstring|getgc|getrawmetatable|setreadonly|debug\.getupvalue|firetouchinterest|queue_on_teleport)\b/i;
 
 const luaKeywords = new Set([
   "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto",
@@ -180,6 +181,9 @@ const server = http.createServer((req, res) => {
     const { code } = body || {};
     if (typeof code !== "string" || !code.trim()) return sendJson(res, 400, { error: "Pega código Lua antes de procesar." });
     if (Buffer.byteLength(code, "utf8") > MAX_SOURCE_BYTES) return sendJson(res, 413, { error: "El límite es 500 KB por archivo." });
+    if (UNSUPPORTED_EXECUTOR_APIS.test(code)) {
+      return sendJson(res, 400, { error: "Este proyecto solo procesa Luau legítimo de Roblox Studio; detectó una API de executor o carga dinámica no compatible." });
+    }
     try {
       const result = obfuscate(code, body);
       const ratio = Math.round((result.code.length / code.length) * 100);
