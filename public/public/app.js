@@ -1,107 +1,407 @@
-const input = document.getElementById("input");
-const output = document.getElementById("output");
+"use strict";
 
-const level = document.getElementById("level");
-const button = document.getElementById("obfuscate");
+const inputCode =
+    document.getElementById(
+        "inputCode"
+    );
 
-const copy = document.getElementById("copy");
-const clear = document.getElementById("clear");
+const outputCode =
+    document.getElementById(
+        "outputCode"
+    );
 
-const inputInfo = document.getElementById("inputInfo");
-const outputInfo = document.getElementById("outputInfo");
-const resultStatus = document.getElementById("resultStatus");
+const protectBtn =
+    document.getElementById(
+        "protectBtn"
+    );
 
-function updateCounters() {
-    inputInfo.textContent =
-        `${input.value.length.toLocaleString()} characters`;
+const protectText =
+    document.getElementById(
+        "protectText"
+    );
 
-    outputInfo.textContent =
-        `${output.value.length.toLocaleString()} characters`;
+const spinner =
+    document.getElementById(
+        "spinner"
+    );
+
+const clearBtn =
+    document.getElementById(
+        "clearBtn"
+    );
+
+const copyBtn =
+    document.getElementById(
+        "copyBtn"
+    );
+
+const inputSize =
+    document.getElementById(
+        "inputSize"
+    );
+
+const outputSize =
+    document.getElementById(
+        "outputSize"
+    );
+
+const message =
+    document.getElementById(
+        "message"
+    );
+
+const status =
+    document.getElementById(
+        "status"
+    );
+
+const levelButtons =
+    document.querySelectorAll(
+        ".level"
+    );
+
+let selectedLevel = 1;
+
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
+function updateSize() {
+    inputSize.textContent =
+        `${inputCode.value.length.toLocaleString()} caracteres`;
+
+    outputSize.textContent =
+        `${outputCode.value.length.toLocaleString()} caracteres`;
 }
 
-input.addEventListener("input", updateCounters);
+function setMessage(
+    text,
+    type = ""
+) {
+    message.textContent = text;
 
-clear.addEventListener("click", () => {
-    input.value = "";
-    output.value = "";
+    message.className =
+        "message " + type;
+}
 
-    resultStatus.textContent = "READY";
+function setLoading(
+    loading
+) {
+    protectBtn.disabled =
+        loading;
 
-    updateCounters();
-});
+    spinner.classList.toggle(
+        "hidden",
+        !loading
+    );
 
-button.addEventListener("click", async () => {
+    protectText.textContent =
+        loading
+            ? "PROCESANDO..."
+            : "PROTEGER";
+}
 
-    if (!input.value.trim()) {
-        resultStatus.textContent = "NO INPUT";
-        input.focus();
-        return;
+
+/* =========================================================
+   LEVEL SELECTOR
+   ========================================================= */
+
+levelButtons.forEach(
+    button => {
+        button.addEventListener(
+            "click",
+            () => {
+                levelButtons.forEach(
+                    item =>
+                        item.classList.remove(
+                            "active"
+                        )
+                );
+
+                button.classList.add(
+                    "active"
+                );
+
+                selectedLevel =
+                    Number(
+                        button.dataset.level
+                    );
+
+                setMessage("");
+            }
+        );
     }
+);
 
-    button.disabled = true;
-    button.innerHTML = "<span>◌</span> PROCESSING...";
-    resultStatus.textContent = "PROCESSING";
 
-    try {
+/* =========================================================
+   INPUT
+   ========================================================= */
 
-        const response = await fetch("/api/obfuscate", {
-            method: "POST",
+inputCode.addEventListener(
+    "input",
+    updateSize
+);
 
-            headers: {
-                "Content-Type": "application/json"
-            },
 
-            body: JSON.stringify({
-                code: input.value,
-                level: Number(level.value)
-            })
-        });
+/* =========================================================
+   CLEAR
+   ========================================================= */
 
-        const data = await response.json();
+clearBtn.addEventListener(
+    "click",
+    () => {
+        inputCode.value = "";
+        outputCode.value = "";
 
-        if (!response.ok) {
-            throw new Error(data.error || "Server error");
+        updateSize();
+
+        setMessage("");
+
+        inputCode.focus();
+    }
+);
+
+
+/* =========================================================
+   COPY
+   ========================================================= */
+
+copyBtn.addEventListener(
+    "click",
+    async () => {
+        const text =
+            outputCode.value;
+
+        if (!text) {
+            setMessage(
+                "No hay código para copiar.",
+                "error"
+            );
+
+            return;
         }
 
-        output.value = data.code;
+        try {
+            await navigator.clipboard.writeText(
+                text
+            );
 
-        resultStatus.textContent = "PROTECTED";
+            setMessage(
+                "Código copiado.",
+                "success"
+            );
 
-        updateCounters();
+            setTimeout(
+                () => setMessage(""),
+                1800
+            );
+        } catch {
+            outputCode.focus();
+            outputCode.select();
 
-    } catch (error) {
+            document.execCommand(
+                "copy"
+            );
 
-        resultStatus.textContent = "ERROR";
-
-        alert(error.message);
-
-    } finally {
-
-        button.disabled = false;
-        button.innerHTML = "<span>✦</span> OBFUSCATE";
+            setMessage(
+                "Código copiado.",
+                "success"
+            );
+        }
     }
-});
+);
 
-copy.addEventListener("click", async () => {
 
-    if (!output.value) {
-        return;
+/* =========================================================
+   PROTECT
+   ========================================================= */
+
+protectBtn.addEventListener(
+    "click",
+    async () => {
+        const code =
+            inputCode.value;
+
+        if (!code.trim()) {
+            setMessage(
+                "Pega un script Lua/Luau primero.",
+                "error"
+            );
+
+            inputCode.focus();
+
+            return;
+        }
+
+        setLoading(true);
+
+        setMessage(
+            "Procesando..."
+        );
+
+        try {
+            const response =
+                await fetch(
+                    "/api/obfuscate",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body:
+                            JSON.stringify({
+                                code,
+                                level:
+                                    selectedLevel
+                            })
+                    }
+                );
+
+            let data;
+
+            try {
+                data =
+                    await response.json();
+            } catch {
+                throw new Error(
+                    "El servidor devolvió una respuesta inválida."
+                );
+            }
+
+            if (
+                !response.ok ||
+                !data.success
+            ) {
+                throw new Error(
+                    data.error ||
+                    "No se pudo proteger el código."
+                );
+            }
+
+            outputCode.value =
+                data.code || "";
+
+            updateSize();
+
+            setMessage(
+                `Protegido correctamente · nivel ${data.level}`,
+                "success"
+            );
+
+        } catch (error) {
+            console.error(
+                error
+            );
+
+            setMessage(
+                error.message ||
+                "Error de conexión.",
+                "error"
+            );
+
+        } finally {
+            setLoading(false);
+        }
     }
+);
 
+
+/* =========================================================
+   HEALTH CHECK
+   ========================================================= */
+
+async function checkServer() {
     try {
+        const response =
+            await fetch(
+                "/api/health",
+                {
+                    cache: "no-store"
+                }
+            );
 
-        await navigator.clipboard.writeText(output.value);
+        if (!response.ok) {
+            throw new Error();
+        }
 
-        copy.textContent = "COPIED ✓";
+        const data =
+            await response.json();
 
-        setTimeout(() => {
-            copy.textContent = "COPY";
-        }, 1500);
+        if (data.ok) {
+            status.innerHTML =
+                `
+                <span class="status-dot"></span>
+                ONLINE
+                `;
+
+            return;
+        }
+
+        throw new Error();
 
     } catch {
-        output.select();
-        document.execCommand("copy");
+        status.innerHTML =
+            `
+            <span
+                class="status-dot"
+                style="
+                    background:#ff6969;
+                    box-shadow:0 0 10px rgba(255,105,105,.6)
+                "
+            ></span>
+            OFFLINE
+            `;
     }
-});
+}
 
-updateCounters();
+
+/* =========================================================
+   TAB KEY
+   ========================================================= */
+
+inputCode.addEventListener(
+    "keydown",
+    event => {
+        if (
+            event.key === "Tab"
+        ) {
+            event.preventDefault();
+
+            const start =
+                inputCode.selectionStart;
+
+            const end =
+                inputCode.selectionEnd;
+
+            inputCode.value =
+                inputCode.value.slice(
+                    0,
+                    start
+                ) +
+                "    " +
+                inputCode.value.slice(
+                    end
+                );
+
+            inputCode.selectionStart =
+                inputCode.selectionEnd =
+                    start + 4;
+
+            updateSize();
+        }
+    }
+);
+
+
+/* =========================================================
+   INITIAL
+   ========================================================= */
+
+updateSize();
+
+checkServer();
