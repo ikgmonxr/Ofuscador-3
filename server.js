@@ -18,22 +18,6 @@ const luaKeywords = new Set([
   "continue","export","type"
 ]);
 
-const RESERVED = new Set([
-  ...luaKeywords,
-  "game","workspace","script","plugin","shared","_G","_ENV","self",
-  "Instance","Enum","Color3","Vector3","CFrame","UDim2","UDim","Rect",
-  "TweenInfo","BrickColor","Ray","Region3","task","wait","spawn","delay",
-  "tick","time","os","math","string","table","pairs","ipairs","next","type",
-  "typeof","print","warn","error","pcall","xpcall","select","unpack",
-  "rawget","rawset","rawequal","rawlen","setmetatable","getmetatable",
-  "coroutine","debug","utf8","bit32","buffer","require",
-  "Players","RunService","UserInputService","TweenService","HttpService",
-  "ReplicatedStorage","Lighting","CoreGui","Workspace","Camera",
-  "Humanoid","HumanoidRootPart","LocalPlayer","GetService","FindFirstChild",
-  "WaitForChild","GetChildren","GetDescendants","IsA","Clone","Destroy",
-  "Connect","Disconnect","Fire","Invoke"
-]);
-
 function isIdentifierStart(ch) { return /[A-Za-z_]/.test(ch || ""); }
 function isIdentifierPart(ch) { return /[A-Za-z0-9_]/.test(ch || ""); }
 function isWordEnd(t) { return /[A-Za-z0-9_]/.test((t || "").slice(-1)); }
@@ -129,27 +113,45 @@ function decodeString(raw) {
 
 function obfuscate(code, options) {
   const tokens = tokenizeLua(code);
-  const level = Number(options.level) || 2;
   const doStrings = options.encryptStrings !== false;
 
-  // Renombrar solo identificadores seguros
-  const map = new Map();
-  let id = 0;
-  for (const t of tokens) {
-    if (t.type === "identifier" && !RESERVED.has(t.value) && t.value.length > 2) {
-      if (!map.has(t.value)) {
-        id++;
-        map.set(t.value, makeName(id));
+  // ========== SOLO renombrar variables local ==========
+  const renameMap = new Map();
+  let counter = 0;
+
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].type === "keyword" && tokens[i].value === "local") {
+      // local a, b, c = ...
+      let j = i + 1;
+      while (j < tokens.length) {
+        if (tokens[j].type === "identifier") {
+          const name = tokens[j].value;
+          if (name.length > 1 && !renameMap.has(name)) {
+            counter++;
+            renameMap.set(name, makeName(counter));
+          }
+          j++;
+          // si hay coma, sigue
+          if (j < tokens.length && tokens[j].type === "symbol" && tokens[j].value === ",") {
+            j++;
+            continue;
+          }
+          break;
+        } else {
+          break;
+        }
       }
     }
   }
+
+  // Aplicar rename SOLO a los que están en el mapa
   for (const t of tokens) {
-    if (t.type === "identifier" && map.has(t.value)) {
-      t.value = map.get(t.value);
+    if (t.type === "identifier" && renameMap.has(t.value)) {
+      t.value = renameMap.get(t.value);
     }
   }
 
-  // Decoder
+  // ========== Cifrado de strings (opcional y seguro) ==========
   const key = crypto.randomBytes(3);
   const decName = "_d" + crypto.randomBytes(2).toString("hex");
   const keyList = [...key].join(",");
@@ -160,31 +162,39 @@ function obfuscate(code, options) {
   for (const t of tokens) {
     let cur = t.value;
 
-    // Cifrar strings cortas (seguro)
-    if (doStrings && t.type === "string" && level >= 2) {
+    if (doStrings && t.type === "string") {
       const decoded = decodeString(t.value);
-      if (decoded && decoded.length > 0 && decoded.length < 300 &&
-          !/https?:\/\//i.test(decoded) && !/rbxassetid/i.test(decoded)) {
-        const bytes = [...Buffer.from(decoded, "utf8")].map((b, i) => b ^ key[i % key.length]);
+      if (
+        decoded &&
+        decoded.length > 0 &&
+        decoded.length < 250 &&
+        !/https?:\/\//i.test(decoded) &&
+        !/rbxassetid/i.test(decoded)
+      ) {
+        const bytes = [...Buffer.from(decoded, "utf8")].map(
+          (b, idx) => b ^ key[idx % key.length]
+        );
         cur = `${decName}({${bytes.join(",")}})`;
       }
     }
 
-    const needSpace = (isWordEnd(prev) && isWordStart(cur)) ||
-                      (prev.endsWith("-") && cur.startsWith("-"));
+    const needSpace =
+      (isWordEnd(prev) && isWordStart(cur)) ||
+      (prev.endsWith("-") && cur.startsWith("-"));
+
     if (needSpace) body += " ";
     body += cur;
     prev = cur;
   }
 
-  const decoder = doStrings && level >= 2
+  const decoder = doStrings
     ? `local ${decName}=function(t)local k={${keyList}}local r={}for i=1,#t do r[i]=string.char(bit32.bxor(t[i],k[(i-1)%#k+1]))end return table.concat(r)end;`
     : "";
 
   const result = `-- Protect by QyrexObf\n${decoder}${body}`;
   const hash = crypto.createHash("sha256").update(result).digest("hex").slice(0, 10);
 
-  return { code: result, level, hash };
+  return { code: result, hash };
 }
 
 function sendJson(res, status, obj) {
@@ -214,10 +224,14 @@ const server = http.createServer((req, res) => {
     if (size > MAX_SOURCE_BYTES + 50 * 1024) return req.destroy();
     chunks.push(c);
   });
+
   req.on("end", () => {
     let body;
-    try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
-    catch { return sendJson(res, 400, { error: "JSON inválido" }); }
+    try {
+      body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    } catch {
+      return sendJson(res, 400, { error: "JSON inválido" });
+    }
 
     const code = body?.code;
     if (typeof code !== "string" || !code.trim()) {
@@ -227,13 +241,11 @@ const server = http.createServer((req, res) => {
       return sendJson(res, 413, { error: "Demasiado grande" });
     }
 
-    // SIN restricción de APIs de executor
-
     try {
       const result = obfuscate(code, body);
       return sendJson(res, 200, {
         ...result,
-        compressionRatio: Math.round(result.code.length / code.length * 100) + "%"
+        compressionRatio: Math.round((result.code.length / code.length) * 100) + "%"
       });
     } catch (e) {
       return sendJson(res, 500, { error: e.message || "Error" });
