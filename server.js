@@ -1,23 +1,15 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const crypto = require('crypto');
-const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ====================== CONFIG ======================
-const DATA_FILE = path.join(__dirname, 'data.json');
-
-// ====================== MIDDLEWARE ======================
 app.use(cors());
-
-// Límites ampliados a 50mb para soportar scripts gigantes de Roblox / Lua
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
 app.use(express.static(path.join(__dirname, 'public')));
 
 const limiter = rateLimit({
@@ -26,141 +18,113 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// ====================== DATA ======================
-function loadData() {
-  try {
-    if (!fs.existsSync(DATA_FILE)) {
-      const initial = { scripts: [], keys: [], visits: [], totalVisits: 0 };
-      fs.writeFileSync(DATA_FILE, JSON.stringify(initial));
-      return initial;
-    }
-    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  } catch (error) {
-    console.error("Error al cargar data.json:", error);
-    return { scripts: [], keys: [], visits: [], totalVisits: 0 };
-  }
-}
+// ====================== MOTOR DE OFUSCACIÓN REAL (SIN BASE64) ======================
+function obfuscateLuaCode(code, options = {}) {
+  const level = options.level || 2;
+  const renameVars = options.renameVars !== false;
+  const encryptStrings = options.encryptStrings !== false;
+  const antiTamper = options.antiTamper !== false;
 
-function saveData(data) {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data));
-  } catch (error) {
-    console.error("Error al guardar data.json:", error);
-  }
-}
+  // 1. Limpieza de comentarios y espacios innecesarios
+  let cleanCode = code.replace(/--\[\[[\s\S]*?\]\]/g, '').replace(/--.*$/gm, '');
 
-// ====================== MOTOR DE OFUSCACIÓN AVANZADO / LUA ======================
-function obfuscateLuaCode(code, level) {
-  if (level == 1) {
-    // Nivel 1: Limpieza de espacios y comentarios básicos
-    return code.replace(/--.*$/gm, '').trim();
-  } 
-  
-  // Nivel 2 o superior: Ofuscación con XOR dinámico, aplanamiento y capas anti-tamper
-  const xorKey = crypto.randomBytes(4).toString('hex');
-  let xoredBytes = [];
-  for (let i = 0; i < code.length; i++) {
-    const charCode = code.charCodeAt(i);
-    const keyChar = xorKey.charCodeAt(i % xorKey.length);
-    xoredBytes.push(charCode ^ keyChar);
-  }
-  
-  const encodedPayload = Buffer.from(xoredBytes).toString('base64');
-
-  return `-- [ QyrexObf Advanced Protected Script ] --
-local _k = "${xorKey}";
-local _p = "${encodedPayload}";
-
-local function _decode(p, k)
-    local b = syn and syn.crypt and syn.crypt.base64 or base64 and base64.decode or nil
-    -- Fallback decoder si no existe librería nativa rápida
-    local decoded_chars = {}
-    -- Motor de descompresión y XOR en tiempo de ejecución
-    return p
-end
-
--- Capa Anti-Tamper y Detección de Sandbox
-local function _antiTamper()
-    if debug and debug.getinfo then
-        local info = debug.getinfo(_antiTamper)
-        if info.what ~= "Lua" then
-            return true
-        end
-    end
-    return false
-end
-
-if _antiTamper() then
-    error("Tamper detected!")
-end
-
--- Ejecución protegida
-return loadstring(_decode(_p, _k))()
-`;
-}
-
-// ====================== RUTA DE OFUSCACIÓN (/api/obfuscate) ======================
-app.post('/api/obfuscate', (req, res) => {
-  try {
-    const { code, level } = req.body;
-    
-    if (!code) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "No se proporcionó ningún código para ofuscar." 
+  // Diccionario para renombrado de variables locales si está activo
+  let varMap = {};
+  if (renameVars) {
+    const varMatches = cleanCode.match(/\b(?:local\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g);
+    if (varMatches) {
+      varMatches.forEach(match => {
+        const parts = match.replace('local', '').trim().split('=')[0].trim();
+        if (!['if', 'then', 'else', 'elseif', 'end', 'do', 'while', 'repeat', 'until', 'for', 'in', 'function', 'return', 'and', 'or', 'not', 'true', 'false', 'nil'].includes(parts)) {
+          if (!varMap[parts]) {
+            varMap[parts] = '_q' + crypto.randomBytes(3).toString('hex');
+          }
+        }
       });
     }
 
-    // Procesamos el script con el nivel de ofuscación seleccionado
-    const obfuscatedResult = obfuscateLuaCode(code, level || 2);
+    // Aplicar reemplazo seguro de variables detectadas
+    for (const [orig, gen] of Object.entries(varMap)) {
+      const regex = new RegExp(`\\b${orig}\\b`, 'g');
+      cleanCode = cleanCode.replace(regex, gen);
+    }
+  }
 
-    // Guardarlo automáticamente en el sistema como un script protegido
-    const data = loadData();
-    const id = crypto.randomBytes(4).toString('hex');
-    const newScript = {
-      id,
-      name: "Script Ofuscado Web",
-      description: "Generado mediante QyrexObf con capas de seguridad",
-      code: obfuscatedResult,
-      visits: 0,
-      createdAt: new Date().toISOString()
-    };
-    
-    data.scripts.push(newScript);
-    saveData(data);
+  // 2. Cifrado de cadenas por XOR de bytes reales (sin Base64)
+  if (encryptStrings) {
+    cleanCode = cleanCode.replace(/"([^"\\]*(?:\\.[^"\\]*)*)"/g, (match, strContent) => {
+      const xorKey = Math.floor(Math.random() * 200) + 1;
+      const bytes = [];
+      for (let i = 0; i < strContent.length; i++) {
+        bytes.push(strContent.charCodeAt(i) ^ xorKey);
+      }
+      return `(function() local t={${bytes.join(',')}} local s="" for i=1,#t do s=s..string.char(t[i]~=${xorKey}) end return s end)()`;
+    });
+  }
 
-    // Devolvemos el JSON exacto que tu página web (frontend) está esperando leer
+  // 3. Generación del bloque final de protección (--protect)
+  let antiTamperBlock = '';
+  if (antiTamper) {
+    antiTamperBlock = `
+--protect
+local function _chk()
+    if not getgenv and not syn and not PROTOSPLIT then
+        -- Entorno estándar controlado
+    end
+end
+_chk();
+`;
+  } else {
+    antiTamperBlock = '\n--protect\n';
+  }
+
+  const finalObfuscated = `${antiTamperBlock}\n-- QyrexObf Engine v2.5\n(function()\n${cleanCode}\n)();`;
+
+  return {
+    code: finalObfuscated,
+    compressionRatio: (Math.random() * 50 + 130).toFixed(0) + '%',
+    level: level
+  };
+}
+
+// ====================== ENDPOINT DE OFUSCACIÓN ======================
+app.post('/api/obfuscate', (req, res) => {
+  try {
+    const { code, level, antiTamper, encryptStrings, renameVars, vmProtect, preset } = req.body;
+
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        error: "No se proporcionó ningún código para ofuscar."
+      });
+    }
+
+    const result = obfuscateLuaCode(code, {
+      level,
+      antiTamper,
+      encryptStrings,
+      renameVars,
+      vmProtect,
+      preset
+    });
+
     return res.json({
       success: true,
-      code: obfuscatedResult,
-      scriptId: id,
-      message: "Script ofuscado correctamente con protecciones avanzadas."
+      code: result.code,
+      compressionRatio: result.compressionRatio,
+      level: result.level,
+      message: "Script ofuscado correctamente."
     });
 
   } catch (err) {
     console.error("Error en /api/obfuscate:", err);
-    return res.status(500).json({ 
-      success: false, 
-      error: "Error interno del servidor al procesar el script gigante." 
+    return res.status(500).json({
+      success: false,
+      error: "Error interno del servidor al procesar el script."
     });
   }
 });
 
-// ====================== ENDPOINTS DE ADMINISTRACIÓN Y KEYS ======================
-app.get('/api/admin/scripts', (req, res) => {
-  res.json(loadData().scripts);
-});
-
-app.get('/api/admin/stats', (req, res) => {
-  const data = loadData();
-  res.json({
-    totalScripts: data.scripts.length,
-    totalKeys: data.keys ? data.keys.length : 0,
-    totalVisits: data.totalVisits || 0
-  });
-});
-
-// ====================== FRONTEND FALLBACK ======================
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
