@@ -7,6 +7,7 @@ const path = require("path");
 
 const PORT = Number(process.env.PORT || 3000);
 const MAX_SOURCE_BYTES = 500 * 1024;
+const indexCandidates = [path.join(__dirname, "index.html"), path.join(process.cwd(), "index.html")];
 
 const luaKeywords = new Set([
   "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto",
@@ -138,8 +139,10 @@ function sendJson(res, status, body) {
 
 const server = http.createServer((req, res) => {
   if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
-    return fs.readFile(path.join(__dirname, "index.html"), (error, page) => {
-      if (error) return sendJson(res, 500, { error: "No se pudo cargar la interfaz." });
+    const indexPath = indexCandidates.find(candidate => fs.existsSync(candidate));
+    if (!indexPath) return sendJson(res, 500, { error: "Falta index.html. Guarda index.html en la misma carpeta que server.js y reinicia el servidor." });
+    return fs.readFile(indexPath, (error, page) => {
+      if (error) return sendJson(res, 500, { error: "No se pudo leer index.html. Revisa los permisos de la carpeta." });
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
       res.end(page);
     });
@@ -169,4 +172,9 @@ const server = http.createServer((req, res) => {
   req.on("error", () => { if (!res.headersSent) sendJson(res, 400, { error: "Solicitud interrumpida." }); });
 });
 
+server.on("error", error => {
+  if (error.code === "EADDRINUSE") console.error(`El puerto ${PORT} ya está en uso. Ejecuta: $env:PORT=3001; npm start`);
+  else console.error(error);
+  process.exitCode = 1;
+});
 server.listen(PORT, () => console.log(`QyrexObf local: http://localhost:${PORT}`));
