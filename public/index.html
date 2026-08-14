@@ -2,302 +2,245 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IkgoForge - Lua Obfuscator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0d0f17;
+            --panel-bg: #161925;
+            --border-color: #272c3f;
+            --accent-color: #6366f1;
+            --accent-hover: #4f46e5;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --code-bg: #0b0c10;
+        }
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
 
-    <title>IKGONAVI</title>
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
 
-    <link
-        rel="stylesheet"
-        href="/style.css"
-    >
+        header {
+            background-color: var(--panel-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            letter-spacing: 1px;
+        }
+
+        .badge {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-color);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            border: 1px solid var(--accent-color);
+        }
+
+        main {
+            flex: 1;
+            padding: 30px 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .editor-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            flex: 1;
+            min-height: 500px;
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 12px 20px;
+            background-color: rgba(0,0,0,0.2);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        textarea {
+            width: 100%;
+            height: 100%;
+            background-color: var(--code-bg);
+            border: none;
+            color: #e2e8f0;
+            padding: 20px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            resize: none;
+            outline: none;
+            line-height: 1.5;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--border-color);
+            color: var(--text-main);
+        }
+
+        @media (max-width: 900px) {
+            .editor-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
-
 <body>
 
-<div class="background"></div>
+    <header>
+        <div class="logo">IKGOFORGE <span style="color:white;">OBFUSCATOR</span></div>
+        <div class="badge">v1.0 Ready</div>
+    </header>
 
-<header class="topbar">
-
-    <div class="brand">
-        <div class="brand-icon">◈</div>
-
-        <div>
-            <div class="brand-name">
-                IKGONAVI
-            </div>
-
-            <div class="brand-subtitle">
-                LUA / LUAU PROTECTOR
-            </div>
-        </div>
-    </div>
-
-    <div
-        id="status"
-        class="status"
-    >
-        <span class="status-dot"></span>
-        ONLINE
-    </div>
-
-</header>
-
-
-<main class="container">
-
-    <section class="hero">
-
-        <div class="eyebrow">
-            SECURE CODE PROCESSOR
+    <main>
+        <div class="controls">
+            <button id="obfuscateBtn">⚡ Ofuscar Código</button>
+            <button class="btn-secondary" id="clearBtn">🗑️ Limpiar</button>
         </div>
 
-        <h1>
-            Protege tu código
-            <span>Luau</span>
-        </h1>
-
-        <p>
-            Protección estable enfocada en mantener
-            el comportamiento original de tu script.
-        </p>
-
-    </section>
-
-
-    <section class="workspace">
-
-        <div class="panel">
-
-            <div class="panel-header">
-
-                <div>
-                    <span class="panel-title">
-                        INPUT
-                    </span>
-
-                    <span
-                        id="inputSize"
-                        class="panel-meta"
-                    >
-                        0 caracteres
-                    </span>
+        <div class="editor-container">
+            <!-- Panel Entrada -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span>CÓDIGO LUA ORIGINAL</span>
+                    <span id="inputSize">0 KB</span>
                 </div>
-
-                <button
-                    id="clearBtn"
-                    class="small-button"
-                    type="button"
-                >
-                    LIMPIAR
-                </button>
-
+                <textarea id="inputCode" placeholder="Pega tu código Lua de Roblox aquí..."></textarea>
             </div>
 
-            <textarea
-                id="inputCode"
-                spellcheck="false"
-                placeholder="Pega tu código Lua / Luau aquí..."
-            ></textarea>
-
-        </div>
-
-
-        <div class="middle">
-
-            <div class="level-title">
-                PROTECTION
-            </div>
-
-            <div class="levels">
-
-                <button
-                    class="level active"
-                    data-level="1"
-                    type="button"
-                >
-                    <strong>01</strong>
-
-                    <span>
-                        CLEAN
-                    </span>
-
-                    <small>
-                        Comentarios
-                    </small>
-                </button>
-
-                <button
-                    class="level"
-                    data-level="2"
-                    type="button"
-                >
-                    <strong>02</strong>
-
-                    <span>
-                        SAFE
-                    </span>
-
-                    <small>
-                        Preservación
-                    </small>
-                </button>
-
-                <button
-                    class="level"
-                    data-level="3"
-                    type="button"
-                >
-                    <strong>03</strong>
-
-                    <span>
-                        COMPACT
-                    </span>
-
-                    <small>
-                        Minificación
-                    </small>
-                </button>
-
-            </div>
-
-            <button
-                id="protectBtn"
-                class="protect-button"
-                type="button"
-            >
-                <span id="protectText">
-                    PROTEGER
-                </span>
-
-                <span
-                    id="spinner"
-                    class="spinner hidden"
-                ></span>
-            </button>
-
-            <div
-                id="message"
-                class="message"
-            ></div>
-
-        </div>
-
-
-        <div class="panel">
-
-            <div class="panel-header">
-
-                <div>
-                    <span class="panel-title">
-                        OUTPUT
-                    </span>
-
-                    <span
-                        id="outputSize"
-                        class="panel-meta"
-                    >
-                        0 caracteres
-                    </span>
+            <!-- Panel Salida -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span>RESULTADO OFUSCADO</span>
+                    <div>
+                        <button class="btn-secondary" id="copyBtn" style="padding: 4px 10px; font-size:0.8rem;">📋 Copiar</button>
+                    </div>
                 </div>
-
-                <button
-                    id="copyBtn"
-                    class="small-button"
-                    type="button"
-                >
-                    COPIAR
-                </button>
-
+                <textarea id="outputCode" readonly placeholder="El código ofuscado aparecerá aquí..."></textarea>
             </div>
-
-            <textarea
-                id="outputCode"
-                readonly
-                spellcheck="false"
-                placeholder="Tu código protegido aparecerá aquí..."
-            ></textarea>
-
         </div>
+    </main>
 
-    </section>
+    <script>
+        const inputCode = document.getElementById('inputCode');
+        const outputCode = document.getElementById('outputCode');
+        const obfuscateBtn = document.getElementById('obfuscateBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const inputSize = document.getElementById('inputSize');
 
+        // Actualizar tamaño de KB en tiempo real
+        inputCode.addEventListener('input', () => {
+            const bytes = new Blob([inputCode.value]).size;
+            inputSize.textContent = (bytes / 1024).toFixed(2) + ' KB';
+        });
 
-    <section class="info-grid">
+        // Evento de Ofuscar
+        obfuscateBtn.addEventListener('click', async () => {
+            const code = inputCode.value;
+            if (!code.trim()) return alert('Por favor, ingresa un código primero.');
 
-        <div class="info-card">
+            obfuscateBtn.textContent = '⏳ Procesando...';
+            
+            try {
+                const response = await fetch('/api/obfuscate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
 
-            <div class="info-number">
-                01
-            </div>
+                const data = await response.json();
+                if (data.success) {
+                    outputCode.value = data.result;
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (err) {
+                alert('No se pudo conectar con el servidor.');
+            } finally {
+                obfuscateBtn.textContent = '⚡ Ofuscar Código';
+            }
+        });
 
-            <div>
-                <h3>
-                    SEMÁNTICA
-                </h3>
+        // Copiar al portapapeles
+        copyBtn.addEventListener('click', () => {
+            if (!outputCode.value) return;
+            navigator.clipboard.writeText(outputCode.value);
+            copyBtn.textContent = '✅ ¡Copiado!';
+            setTimeout(() => copyBtn.textContent = '📋 Copiar', 2000);
+        });
 
-                <p>
-                    No modifica propiedades,
-                    métodos ni nombres globales.
-                </p>
-            </div>
-
-        </div>
-
-
-        <div class="info-card">
-
-            <div class="info-number">
-                02
-            </div>
-
-            <div>
-                <h3>
-                    LUAU SAFE
-                </h3>
-
-                <p>
-                    Strings y números se mantienen
-                    sin reconstrucciones en runtime.
-                </p>
-            </div>
-
-        </div>
-
-
-        <div class="info-card">
-
-            <div class="info-number">
-                03
-            </div>
-
-            <div>
-                <h3>
-                    LOCAL
-                </h3>
-
-                <p>
-                    El procesamiento se realiza
-                    desde tu propio servidor.
-                </p>
-            </div>
-
-        </div>
-
-    </section>
-
-</main>
-
-
-<footer>
-    IKGONAVI <span>•</span> LUA / LUAU
-</footer>
-
-
-<script src="/app.js"></script>
-
+        // Limpiar
+        clearBtn.addEventListener('click', () => {
+            inputCode.value = '';
+            outputCode.value = '';
+            inputSize.textContent = '0 KB';
+        });
+    </script>
 </body>
 </html>
