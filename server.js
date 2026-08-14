@@ -121,34 +121,10 @@ function decodeShortString(raw) {
   return out;
 }
 
-// ===================== ANTI-TAMPER LAYER =====================
+// ===================== ANTI-TAMPER (compact + strong) =====================
 function generateAntiTamper() {
-  const id = crypto.randomBytes(3).toString("hex");
-  const crashName = "_c" + id;
-  const checkName = "_t" + id;
-
-  // Checks for common sandbox / decompiler / debugger globals
-  return `
-local ${crashName}=function()while true do end end
-local ${checkName}=function()
-  if _G.lune or _G.lute or _G.wally or _G.rojo or _G.selene or _G.darklua then ${crashName}() end
-  if _G.plugin or _G.fetch or _G.console or _G.setTimeout or _G.Buffer then ${crashName}() end
-  if _G.window or _G.document or _G.navigator or _G.location then ${crashName}() end
-  if _G.process and (_G.process.env or _G.process.platform) then ${crashName}() end
-  if type(debug)=="table" and (debug.getinfo or debug.getupvalue or debug.getregistry) then
-    local ok=pcall(function() return debug.getinfo(print) end)
-    if ok then ${crashName}() end
-  end
-  if getfenv and setfenv then
-    local e=getfenv(0)
-    if e and (e.lune or e.process or e.fs or e.io) then ${crashName}() end
-  end
-  if not game or not workspace then ${crashName}() end
-  local ok,hs=pcall(function() return game:GetService("HttpService") end)
-  if not ok or not hs then ${crashName}() end
-end
-${checkName}()
-`;
+  const id = crypto.randomBytes(2).toString("hex");
+  return `local _a${id}=function()local function _c()while true do end end;if _G.lune or _G.lute or _G.wally or _G.rojo or _G.selene or _G.darklua or _G.plugin or _G.fetch or _G.console or _G.setTimeout or _G.Buffer or _G.window or _G.document or _G.navigator or _G.location or _G.process then _c()end;if _G.require and(pcall(function()return _G.require("lune")end)or pcall(function()return _G.require("lute")end))then _c()end;if getfenv then local e=getfenv(0);if e and(e.lune or e.process or e.fs or e.io)then _c()end end;if not game or not workspace then _c()end;local ok,hs=pcall(function()return game:GetService("HttpService")end);if not ok or not hs then _c()end;if not pcall(function()return hs:JSONEncode({a=1})end)then _c()end;if type(typeof)~="function"or typeof(game)~="Instance"then _c()end;if debug and debug.getinfo then local ok2=pcall(function()return debug.getinfo(print)end);if ok2 then _c()end end;if math.floor(math.pi)~=3 then _c()end;if string.byte("A")~=65 then _c()end end;_a${id}();`;
 }
 
 // ===================== OBFUSCATE =====================
@@ -160,7 +136,7 @@ function obfuscate(source, options = {}) {
   const encryptStrings = options.encryptStrings !== false;
   const antiTamper = options.antiTamper !== false;
 
-  // 1. Rename solo variables locales
+  // Rename solo locals
   const renameMap = new Map();
   let counter = 0;
   for (let i = 0; i < tokens.length; i++) {
@@ -184,19 +160,16 @@ function obfuscate(source, options = {}) {
     }
   }
 
-  // 2. Aplicar rename (evitar propiedades)
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (t.type === "identifier" && renameMap.has(t.value)) {
       const prev = i > 0 ? tokens[i - 1] : null;
       const isProperty = prev && prev.type === "symbol" && (prev.value === "." || prev.value === ":");
-      if (!isProperty) {
-        t.value = renameMap.get(t.value);
-      }
+      if (!isProperty) t.value = renameMap.get(t.value);
     }
   }
 
-  // 3. Cifrado de strings
+  // String encryption
   const key = crypto.randomBytes(4);
   const decName = "_d" + crypto.randomBytes(2).toString("hex");
   const keyArr = [...key].join(",");
@@ -234,12 +207,10 @@ function obfuscate(source, options = {}) {
 
   const anti = antiTamper ? generateAntiTamper() : "";
 
-  // Junk code para dificultar análisis estático
-  const junk = `
-local _j${crypto.randomBytes(2).toString("hex")}=function()return (function()local a=1 for i=1,3 do a=a+i end return a end)()end
-`;
+  // Todo en 1 línea
+  const oneLine = `${anti}${decoder}${body}`.replace(/\s+/g, " ").trim();
 
-  const result = `-- Protect by QyrexObf + AntiTamper\n${anti}${junk}${decoder}${body}`;
+  const result = `-- Protect by QyrexObf\n${oneLine}`;
 
   return {
     code: result,
@@ -257,7 +228,6 @@ function sendJson(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
-// ===================== SERVIDOR =====================
 const server = http.createServer((req, res) => {
   if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
     const indexPath = indexCandidates.find(c => fs.existsSync(c));
@@ -315,5 +285,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log("QyrexObf + AntiTamper corriendo en puerto", PORT);
+  console.log("QyrexObf corriendo en puerto", PORT);
 });
