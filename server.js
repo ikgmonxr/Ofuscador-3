@@ -1,238 +1,162 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lua Obfuscator</title>
-<style>
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  padding: 20px;
-  background: #1a1a1a;
-  color: #fff;
-  font-family: Consolas, monospace;
-}
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-h1 {
-  text-align: center;
-  margin-top: 0;
-}
-.toolbar {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-select, button {
-  padding: 8px 15px;
-  background: #333;
-  color: #fff;
-  border: 1px solid #555;
-  border-radius: 3px;
-  cursor: pointer;
-  font-family: Consolas, monospace;
-  font-size: 12px;
-}
-button:hover {
-  background: #444;
-}
-button:disabled {
-  opacity: 0.5;
-  cursor: wait;
-}
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-.panel {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid #444;
-  background: #222;
-}
-.panel-title {
-  padding: 10px;
-  background: #333;
-  border-bottom: 1px solid #444;
-  font-weight: bold;
-}
-textarea {
-  flex: 1;
-  padding: 10px;
-  background: #1a1a1a;
-  color: #0f0;
-  border: none;
-  font-family: Consolas, monospace;
-  font-size: 12px;
-  resize: none;
-  min-height: 400px;
-}
-.info {
-  padding: 8px;
-  background: #2a2a2a;
-  border-top: 1px solid #444;
-  font-size: 11px;
-  color: #888;
-  display: flex;
-  justify-content: space-between;
-}
-.button-row {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-top: 20px;
-  flex-wrap: wrap;
-}
-button {
-  padding: 10px 20px;
-}
-.status {
-  text-align: center;
-  margin-top: 10px;
-  font-size: 12px;
-  color: #888;
-  min-height: 20px;
-}
-.status.success {
-  color: #0f0;
-}
-.status.error {
-  color: #f00;
-}
-@media (max-width: 800px) {
-  .grid {
-    grid-template-columns: 1fr;
+const express = require("express");
+const path = require("path");
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json({ limit: "50mb" }));
+
+const RESERVED = new Set([
+  "and","break","do","else","elseif","end","false","for","function","goto","if","in",
+  "local","nil","not","or","repeat","return","then","true","until","while","_G","_ENV",
+  "self","game","workspace","script","require","Instance","Enum","Color3","Vector3","CFrame",
+  "task","wait","spawn","delay","tick","time","os","math","string","table","pairs","ipairs"
+]);
+
+function randomName() {
+  let result = "_";
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  for (let i = 0; i < 10; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
+  return result;
 }
-</style>
-</head>
-<body>
 
-<div class="container">
-  <h1>LUA OBFUSCATOR</h1>
+function stripComments(code) {
+  let result = "";
+  let i = 0;
+  
+  while (i < code.length) {
+    if ((code[i] === '"' || code[i] === "'") && (i === 0 || code[i-1] !== "\\")) {
+      const quote = code[i];
+      result += code[i];
+      i++;
+      while (i < code.length) {
+        result += code[i];
+        if (code[i] === quote && code[i-1] !== "\\") {
+          i++;
+          break;
+        }
+        i++;
+      }
+    }
+    else if (code.substr(i, 4) === "--[[") {
+      i += 4;
+      while (i < code.length - 1) {
+        if (code.substr(i, 2) === "]]") {
+          i += 2;
+          break;
+        }
+        i++;
+      }
+    }
+    else if (code.substr(i, 2) === "--") {
+      while (i < code.length && code[i] !== "\n") {
+        i++;
+      }
+      if (code[i] === "\n") {
+        result += "\n";
+        i++;
+      }
+    }
+    else {
+      result += code[i];
+      i++;
+    }
+  }
+  return result;
+}
 
-  <div class="toolbar">
-    <select id="level">
-      <option value="1">Level 1 - Rename Variables</option>
-      <option value="2" selected>Level 2 - Rename + Numbers</option>
-    </select>
-    <button onclick="doObfuscate()">OBFUSCATE</button>
-  </div>
+function renameVars(code) {
+  const map = new Map();
+  const regex = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+  let match;
+  
+  while ((match = regex.exec(code)) !== null) {
+    const name = match[1];
+    if (!map.has(name) && !RESERVED.has(name)) {
+      map.set(name, randomName());
+    }
+  }
 
-  <div class="grid">
-    <div class="panel">
-      <div class="panel-title">INPUT</div>
-      <textarea id="input" placeholder="Paste your Lua script here..."></textarea>
-      <div class="info">
-        <span id="inputInfo">0 bytes</span>
-        <button onclick="clearInput()" style="padding: 3px 8px; font-size: 11px;">Clear</button>
-      </div>
-    </div>
+  let result = code;
+  const entries = Array.from(map.entries()).sort((a, b) => b[0].length - a[0].length);
+  
+  for (const [old, newName] of entries) {
+    const p = new RegExp("\\b" + old.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g");
+    result = result.replace(p, newName);
+  }
 
-    <div class="panel">
-      <div class="panel-title">OUTPUT</div>
-      <textarea id="output" readonly placeholder="Obfuscated script will appear here..."></textarea>
-      <div class="info">
-        <span id="outputInfo">0 bytes</span>
-        <button onclick="copyOutput()" style="padding: 3px 8px; font-size: 11px;">Copy</button>
-      </div>
-    </div>
-  </div>
+  return result;
+}
 
-  <div class="status" id="status">Ready</div>
+function obfuscateNums(code) {
+  return code.replace(/\b([1-9]\d{1,5})\b/g, (match, num) => {
+    const n = parseInt(num);
+    if (n < 2 || n > 100000) return num;
+    if (Math.random() < 0.5) {
+      return `(${n + 1}-1)`;
+    }
+    return num;
+  });
+}
 
-  <div class="button-row">
-    <button onclick="clearAll()">Clear All</button>
-  </div>
-</div>
+function minify(code) {
+  return code
+    .split("\n")
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .join("\n");
+}
 
-<script>
-const input = document.getElementById('input');
-const output = document.getElementById('output');
-const inputInfo = document.getElementById('inputInfo');
-const outputInfo = document.getElementById('outputInfo');
-const status = document.getElementById('status');
+function obfuscate(code, level) {
+  code = stripComments(code);
 
-input.addEventListener('input', () => {
-  inputInfo.textContent = input.value.length + ' bytes';
+  if (level >= 1) {
+    code = renameVars(code);
+  }
+
+  if (level >= 2) {
+    code = obfuscateNums(code);
+    code = minify(code);
+  }
+
+  return code;
+}
+
+app.post("/api/obfuscate", (req, res) => {
+  try {
+    const { code, level } = req.body;
+
+    if (!code || typeof code !== "string") {
+      return res.status(400).json({ error: "No script" });
+    }
+
+    if (code.length > 50000000) {
+      return res.status(400).json({ error: "Too large" });
+    }
+
+    const lv = Math.max(1, Math.min(2, Number(level) || 1));
+    const out = obfuscate(code, lv);
+
+    res.json({
+      success: true,
+      code: out,
+      inputSize: code.length,
+      outputSize: out.length,
+      level: lv
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-function doObfuscate() {
-  if (!input.value.trim()) {
-    status.textContent = 'Error: Paste a script first';
-    status.className = 'status error';
-    return;
-  }
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
-  const btn = event.target;
-  btn.disabled = true;
-  btn.textContent = 'Processing...';
+app.use(express.static(path.join(__dirname, "public")));
 
-  const level = document.getElementById('level').value;
-
-  fetch('/api/obfuscate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      code: input.value,
-      level: parseInt(level)
-    })
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.success) {
-      output.value = data.code;
-      outputInfo.textContent = data.outputSize + ' bytes';
-      status.textContent = '✓ Done';
-      status.className = 'status success';
-    } else {
-      status.textContent = 'Error: ' + data.error;
-      status.className = 'status error';
-    }
-  })
-  .catch(e => {
-    status.textContent = 'Error: ' + e.message;
-    status.className = 'status error';
-  })
-  .finally(() => {
-    btn.disabled = false;
-    btn.textContent = 'OBFUSCATE';
-  });
-}
-
-function copyOutput() {
-  if (!output.value) return;
-  navigator.clipboard.writeText(output.value).then(() => {
-    status.textContent = '✓ Copied';
-    status.className = 'status success';
-    setTimeout(() => {
-      status.textContent = 'Ready';
-      status.className = 'status';
-    }, 2000);
-  });
-}
-
-function clearInput() {
-  input.value = '';
-  inputInfo.textContent = '0 bytes';
-}
-
-function clearAll() {
-  input.value = '';
-  output.value = '';
-  inputInfo.textContent = '0 bytes';
-  outputInfo.textContent = '0 bytes';
-  status.textContent = 'Ready';
-  status.className = 'status';
-}
-</script>
-
-</body>
-</html>
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Running on port ${PORT}`);
+});
