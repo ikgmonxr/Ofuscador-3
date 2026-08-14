@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "5mb" }));
 
-/* IKGONAVI v6 — Extreme FIXED for Roblox */
+/* IKGONAVI v7 — syntax-safe Extreme for Roblox executors */
 
 const RESERVED = new Set([
   "and","break","do","else","elseif","end","false","for","function",
@@ -30,9 +30,8 @@ function rnd(n) {
 }
 
 function ln() {
-  const p = ["a","b","c","d","e","f","g","h","i","j","k","m","n","o","p","q","r","s","t","u","v","w","x","y","z"];
-  const x = p[(Math.random() * p.length) | 0];
-  return "_" + x + rnd(4) + ((Math.random() * 99) | 0);
+  const p = "abcdefghijkmnopqrstuvwxyz";
+  return "_" + p[(Math.random() * p.length) | 0] + rnd(5);
 }
 
 function xorBytes(str, key) {
@@ -72,11 +71,13 @@ function rc4(data, keyBytes) {
 
 function luaByteTable(arr) {
   const parts = [];
-  for (let i = 0; i < arr.length; i += 60) {
-    parts.push(arr.slice(i, i + 60).join(","));
+  for (let i = 0; i < arr.length; i += 70) {
+    parts.push(arr.slice(i, i + 70).join(","));
   }
   if (parts.length === 1) return "{" + parts[0] + "}";
-  return "(function()local t={}for _,c in ipairs({" + parts.map(function(p){return "{"+p+"}";}).join(",") + "})do for _,v in ipairs(c)do t[#t+1]=v end end return t end)()";
+  return "(function()local t={}for _,c in ipairs({" +
+    parts.map(function(p) { return "{" + p + "}"; }).join(",") +
+    "})do for _,v in ipairs(c)do t[#t+1]=v end end return t end)()";
 }
 
 function stripComments(code) {
@@ -93,45 +94,62 @@ function renameLocals(code) {
   while ((m = re.exec(code)) !== null) {
     const names = m[1].split(/\s*,\s*/);
     for (let ni = 0; ni < names.length; ni++) {
-      const name = names[ni];
-      if (!map.has(name) && !RESERVED.has(name)) {
+      const name = names[ni].trim();
+      if (name && !map.has(name) && !RESERVED.has(name)) {
         c++;
-        map.set(name, ln());
+        map.set(name, ln() + c);
       }
     }
   }
-  map.forEach(function(newN, oldN) {
-    code = code.replace(new RegExp("\\b" + oldN + "\\b", "g"), newN);
-  });
+  const entries = [...map.entries()].sort(function(a, b) { return b[0].length - a[0].length; });
+  for (let ei = 0; ei < entries.length; ei++) {
+    const oldN = entries[ei][0];
+    const newN = entries[ei][1];
+    const escaped = oldN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    code = code.replace(new RegExp("\\b" + escaped + "\\b", "g"), newN);
+  }
   return code;
 }
 
 function obfuscateNumbers(code) {
-  return code.replace(/\b(\d{2,6})\b/g, function(_, num) {
+  return code.replace(/\b(\d{2,5})\b/g, function(_, num) {
     const n = parseInt(num, 10);
-    if (n < 10 || n > 100000) return num;
-    const a = ((Math.random() * 20) | 0) + 2;
-    if (Math.random() < 0.5) return "(" + a + "+" + (n - a) + ")";
-    return "(" + (n * 2) + "//2)";
+    if (n < 12 || n > 50000) return num;
+    if (Math.random() < 0.4) return "(" + (n + 7) + "-7)";
+    if (Math.random() < 0.5) return "(" + (n * 2) + "//2)";
+    return num;
   });
 }
 
 function injectJunk(code) {
   function junk() {
-    const a = ln(), b = ln();
+    const a = ln();
     const opts = [
-      "do local " + a + "=nil end;",
-      "local " + a + "=(function()return true end)();",
-      "pcall(function() local " + a + "=0 end);",
-      "local " + a + "," + b + "=1,2;" + a + "=" + a + "+" + b + "-" + b + ";"
+      "do local " + a + "=nil end",
+      "pcall(function() end)",
+      "local " + a + "=nil"
     ];
     return opts[(Math.random() * opts.length) | 0];
   }
   const lines = code.split("\n");
   const out = [];
   for (let li = 0; li < lines.length; li++) {
-    out.push(lines[li]);
-    if (lines[li].trim().length > 8 && Math.random() > 0.55) out.push(junk());
+    const line = lines[li];
+    out.push(line);
+    const t = line.trim();
+    const endsUnsafe =
+      /function\s*$/.test(t) ||
+      /then\s*$/.test(t) ||
+      /else\s*$/.test(t) ||
+      /do\s*$/.test(t) ||
+      /repeat\s*$/.test(t) ||
+      /,\s*$/.test(t) ||
+      /\(\s*$/.test(t) ||
+      /\{\s*$/.test(t) ||
+      /=\s*$/.test(t);
+    if (t.length > 12 && !endsUnsafe && t.indexOf("--") !== 0 && Math.random() > 0.7) {
+      out.push(junk());
+    }
   }
   return out.join("\n");
 }
@@ -145,7 +163,9 @@ function protectStrings(code, level) {
   });
   code = stripComments(code);
   if (level < 2) {
-    for (let i = 0; i < strings.length; i++) code = code.replace("___S" + i + "___", strings[i]);
+    for (let i = 0; i < strings.length; i++) {
+      code = code.replace("___S" + i + "___", strings[i]);
+    }
     return { code: code, decoder: "" };
   }
   const key1 = crypto.randomBytes(6).toString("hex");
@@ -160,8 +180,12 @@ function protectStrings(code, level) {
     tables.push(luaByteTable(enc));
   }
   const decoder =
-    "local " + decName + "=(function()local _k=\"" + key1 + "\" " +
-    "local function _d(t)local r={}for i=1,#t do r[i]=string.char(bit32.bxor(t[i],string.byte(_k,(i-1)%#_k+1)))end return table.concat(r)end " +
+    "local " + decName + "=(function()" +
+    "local _k=\"" + key1 + "\" " +
+    "local function _d(t)" +
+    "local r={} " +
+    "for i=1,#t do r[i]=string.char(bit32.bxor(t[i],string.byte(_k,(i-1)%#_k+1))) end " +
+    "return table.concat(r) end " +
     "return _d end)()";
   for (let i = 0; i < strings.length; i++) {
     code = code.replace("___S" + i + "___", decName + "(" + tables[i] + ")");
@@ -177,7 +201,6 @@ function buildAntiTamper() {
     "  if type(string.byte) ~= 'function' or string.byte('A') ~= 65 then __k('P2') end",
     "  if type(bit32) ~= 'table' or type(bit32.bxor) ~= 'function' then __k('P3') end",
     "  if bit32.bxor(85, 170) ~= 255 then __k('P4') end",
-    "  if type(game) == type({}) then __k('T1') end",
     "end"
   ].join("\n");
 }
@@ -191,7 +214,7 @@ function buildUltra(full) {
   layer = rc4(layer, rc4Key);
   layer = xorBytes(bytesToString(layer), k2);
 
-  const PAGE = 80;
+  const PAGE = 90;
   const pages = [];
   for (let i = 0; i < layer.length; i += PAGE) {
     pages.push(layer.slice(i, i + PAGE));
@@ -200,81 +223,98 @@ function buildUltra(full) {
   const n = {
     pages: ln(), key1: ln(), key2: ln(), rk: ln(),
     xor: ln(), acc: ln(), tmp: ln(), src: ln(), fn: ln(),
-    S: ln(), i: ln(), j: ln(), p: ln(), out: ln()
+    S: ln(), i: ln(), j: ln(), p: ln(), out: ln(), dec: ln()
   };
 
   let s = "-- Protect by ikgonavi haha\n";
   s += buildAntiTamper() + "\n";
-  s += "local " + n.key1 + " = \"" + k1 + "\"\n";
-  s += "local " + n.key2 + " = \"" + k2 + "\"\n";
-  s += "local " + n.rk + " = {" + rc4Key.join(",") + "}\n";
-  s += "local " + n.pages + " = {\n";
+  s += "local " + n.key1 + "=\"" + k1 + "\"\n";
+  s += "local " + n.key2 + "=\"" + k2 + "\"\n";
+  s += "local " + n.rk + "={" + rc4Key.join(",") + "}\n";
+  s += "local " + n.pages + "={\n";
   for (let i = 0; i < pages.length; i++) {
-    s += "  " + luaByteTable(pages[i]) + (i < pages.length - 1 ? "," : "") + "\n";
+    s += luaByteTable(pages[i]) + (i < pages.length - 1 ? "," : "") + "\n";
   }
   s += "}\n";
-  s += "local function " + n.xor + "(t, k)\n";
-  s += "  local r = {}\n";
-  s += "  for i = 1, #t do\n";
-  s += "    r[i] = string.char(bit32.bxor(t[i], string.byte(k, (i - 1) % #k + 1)))\n";
-  s += "  end\n";
-  s += "  return table.concat(r)\n";
+
+  s += "local function " + n.xor + "(t,k)\n";
+  s += "local r={}\n";
+  s += "for i=1,#t do r[i]=string.char(bit32.bxor(t[i],string.byte(k,(i-1)%#k+1))) end\n";
+  s += "return table.concat(r)\n";
   s += "end\n";
-  s += "local " + n.acc + " = {}\n";
-  s += "for _, " + n.p + " in ipairs(" + n.pages + ") do\n";
-  s += "  for " + n.i + " = 1, #" + n.p + " do\n";
-  s += "    " + n.acc + "[#" + n.acc + " + 1] = " + n.p + "[" + n.i + "]\n";
-  s += "  end\n";
+
+  s += "local " + n.acc + "={}\n";
+  s += "for _," + n.p + " in ipairs(" + n.pages + ") do\n";
+  s += "for " + n.i + "=1,#" + n.p + " do " + n.acc + "[#" + n.acc + "+1]=" + n.p + "[" + n.i + "] end\n";
   s += "end\n";
-  s += "local " + n.tmp + " = " + n.xor + "(" + n.acc + ", " + n.key2 + ")\n";
-  s += "local " + n.out + " = {}\n";
-  s += "for " + n.i + " = 1, #" + n.tmp + " do " + n.out + "[" + n.i + "] = string.byte(" + n.tmp + ", " + n.i + ") end\n";
+
+  s += "local " + n.tmp + "=" + n.xor + "(" + n.acc + "," + n.key2 + ")\n";
+  s += "local " + n.out + "={}\n";
+  s += "for " + n.i + "=1,#" + n.tmp + " do " + n.out + "[" + n.i + "]=string.byte(" + n.tmp + "," + n.i + ") end\n";
+
   s += "do\n";
-  s += "  local " + n.S + " = {}\n";
-  s += "  for " + n.i + " = 0, 255 do " + n.S + "[" + n.i + "] = " + n.i + " end\n";
-  s += "  local " + n.j + " = 0\n";
-  s += "  for " + n.i + " = 0, 255 do\n";
-  s += "    " + n.j + " = (" + n.j + " + " + n.S + "[" + n.i + "] + " + n.rk + "[(" + n.i + " % #" + n.rk + ") + 1]) % 256\n";
-  s += "    " + n.S + "[" + n.i + "], " + n.S + "[" + n.j + "] = " + n.S + "[" + n.j + "], " + n.S + "[" + n.i + "]\n";
-  s += "  end\n";
-  s += "  " + n.i + " = 0\n";
-  s += "  " + n.j + " = 0\n";
-  s += "  local dec = {}\n";
-  s += "  for n = 1, #" + n.out + " do\n";
-  s += "    " + n.i + " = (" + n.i + " + 1) % 256\n";
-  s += "    " + n.j + " = (" + n.j + " + " + n.S + "[" + n.i + "]) % 256\n";
-  s += "    " + n.S + "[" + n.i + "], " + n.S + "[" + n.j + "] = " + n.S + "[" + n.j + "], " + n.S + "[" + n.i + "]\n";
-  s += "    dec[n] = bit32.bxor(" + n.out + "[n], " + n.S + "[(" + n.S + "[" + n.i + "] + " + n.S + "[" + n.j + "]) % 256])\n";
-  s += "  end\n";
-  s += "  " + n.out + " = dec\n";
+  s += "local " + n.S + "={}\n";
+  s += "for " + n.i + "=0,255 do " + n.S + "[" + n.i + "]=" + n.i + " end\n";
+  s += "local " + n.j + "=0\n";
+  s += "for " + n.i + "=0,255 do\n";
+  s += n.j + "=(" + n.j + "+" + n.S + "[" + n.i + "]+" + n.rk + "[(" + n.i + "%#" + n.rk + ")+1])%256\n";
+  s += n.S + "[" + n.i + "]," + n.S + "[" + n.j + "]=" + n.S + "[" + n.j + "]," + n.S + "[" + n.i + "]\n";
   s += "end\n";
-  s += "local " + n.src + " = " + n.xor + "(" + n.out + ", " + n.key1 + ")\n";
-  s += "local __ls = loadstring or load\n";
-  s += "if type(__ls) ~= \"function\" then error(\"IKG: loadstring not available in this environment\", 0) end\n";
-  s += "local " + n.fn + ", __err = __ls(" + n.src + ")\n";
-  s += "if not " + n.fn + " then error(\"IKG load failed: \" .. tostring(__err), 0) end\n";
+  s += n.i + "=0 " + n.j + "=0\n";
+  s += "local " + n.dec + "={}\n";
+  s += "for idx=1,#" + n.out + " do\n";
+  s += n.i + "=(" + n.i + "+1)%256\n";
+  s += n.j + "=(" + n.j + "+" + n.S + "[" + n.i + "])%256\n";
+  s += n.S + "[" + n.i + "]," + n.S + "[" + n.j + "]=" + n.S + "[" + n.j + "]," + n.S + "[" + n.i + "]\n";
+  s += n.dec + "[idx]=bit32.bxor(" + n.out + "[idx]," + n.S + "[(" + n.S + "[" + n.i + "]+" + n.S + "[" + n.j + "])%256])\n";
+  s += "end\n";
+  s += n.out + "=" + n.dec + "\n";
+  s += "end\n";
+
+  s += "local " + n.src + "=" + n.xor + "(" + n.out + "," + n.key1 + ")\n";
+  s += "local __ls=loadstring or load\n";
+  s += "if type(__ls)~=\"function\" then error(\"IKG: loadstring not available\",0) end\n";
+  s += "local " + n.fn + ",__err=__ls(" + n.src + ")\n";
+  s += "if not " + n.fn + " then error(\"IKG load failed: \"..tostring(__err),0) end\n";
   s += "return " + n.fn + "()\n";
   return s;
 }
 
 function minify(code) {
-  return code.replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").replace(/^\s+/gm, "").trim();
+  return code
+    .split("\n")
+    .map(function(l) { return l.replace(/[ \t]+$/g, ""); })
+    .filter(function(l, i, arr) {
+      if (l.trim() === "" && i > 0 && arr[i - 1].trim() === "") return false;
+      return true;
+    })
+    .join("\n")
+    .trim();
 }
 
 function obfuscateLua(source, level) {
   let code = source.trim();
+  code = stripComments(code);
+
   if (level >= 1) code = renameLocals(code);
   if (level >= 2) {
     code = obfuscateNumbers(code);
-    code = injectJunk(code);
+    if (level === 2) code = injectJunk(code);
   }
+
   const prot = protectStrings(code, level);
   code = prot.code;
   const decoder = prot.decoder || "";
   code = minify(code);
-  if (level === 1) return "-- Protect by ikgonavi haha\n" + code;
-  if (level === 2) return "-- Protect by ikgonavi haha\n" + (decoder ? decoder + "\n" : "") + code;
-  return buildUltra((decoder ? decoder + "\n" : "") + code);
+
+  if (level === 1) {
+    return "-- Protect by ikgonavi haha\n" + code;
+  }
+  if (level === 2) {
+    return "-- Protect by ikgonavi haha\n" + (decoder ? decoder + "\n" : "") + code;
+  }
+  const payload = (decoder ? decoder + "\n" : "") + code;
+  return buildUltra(payload);
 }
 
 app.post("/api/obfuscate", function(req, res) {
@@ -303,7 +343,7 @@ app.post("/api/obfuscate", function(req, res) {
 });
 
 app.get("/api/health", function(req, res) {
-  res.json({ ok: true, version: "v6-fixed" });
+  res.json({ ok: true, version: "v7-safe" });
 });
 
 app.get("/", function(req, res) {
@@ -316,6 +356,6 @@ module.exports = app;
 
 if (require.main === module) {
   app.listen(PORT, "0.0.0.0", function() {
-    console.log("IKGONAVI v6 FIXED running on port " + PORT);
+    console.log("IKGONAVI v7 SAFE running on port " + PORT);
   });
 }
