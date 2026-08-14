@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IKGONAVI — Lua Obfuscator</title>
+<title>IKGONAVI v8 — Super Lua Obfuscator</title>
 <style>
 * {
     box-sizing: border-box;
@@ -442,8 +442,8 @@ footer {
         </span>
     </h1>
     <p>
-        Ofuscador potente para scripts Lua orientado a Roblox.
-        Variables renombradas, strings cifrados, junk code y capa Extreme con encoding completo.
+        Super ofuscador multi-capa para Roblox/executors: anti-tamper, multi-chunk XOR→RC4→XOR,
+        string encryption, anti-hooks y anti-sandbox. Diseñado para ser difícil de deobfuscar.
     </p>
 </section>
 <section class="workspace">
@@ -530,10 +530,10 @@ print(player.Name)"
             01
         </div>
         <h3>
-            Variable Protection
+            Anti-Tamper + Vars
         </h3>
         <p>
-            Renombra variables locales de forma agresiva con nombres hex y aleatorios.
+            Anti-hooks, anti-sandbox, timing checks + renombrado agresivo de locals.
         </p>
     </div>
     <div class="feature">
@@ -541,10 +541,10 @@ print(player.Name)"
             02
         </div>
         <h3>
-            String Encryption
+            Multi-Chunk Crypto
         </h3>
         <p>
-            Cifrado XOR de strings + decoder en runtime (Advanced / Extreme).
+            XOR→RC4→XOR multi-chunk. Keys random por build. Payload partido en trozos.
         </p>
     </div>
     <div class="feature">
@@ -552,15 +552,15 @@ print(player.Name)"
             03
         </div>
         <h3>
-            Extreme Layer
+            Full Stack Extreme
         </h3>
         <p>
-            Encoding completo del script + loadstring. Muy difícil de leer a mano.
+            Todas las capas + integrity check. Diseñado para executors Roblox.
         </p>
     </div>
 </section>
 <footer>
-    © 2026 IKGONAVI • Lua / Roblox Obfuscator
+    © 2026 IKGONAVI v8 • Super Obfuscator
 </footer>
 <script>
 const input =
