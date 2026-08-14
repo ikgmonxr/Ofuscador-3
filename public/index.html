@@ -136,6 +136,10 @@ body::before {
     font-weight: 700;
     cursor: pointer;
     transition: 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 #loginBtn {
     background: transparent;
@@ -150,6 +154,15 @@ body::before {
     border: 1px solid #00f2fe;
     color: #fff;
     display: none;
+}
+.discord-nav-btn {
+    background: rgba(88, 101, 242, 0.15);
+    border: 1px solid rgba(88, 101, 242, 0.4);
+    color: #7289da;
+}
+.discord-nav-btn:hover {
+    background: rgba(88, 101, 242, 0.3);
+    color: #fff;
 }
 
 /* MODAL AUTH */
@@ -590,6 +603,7 @@ footer {
             <span class="status-dot"></span>
             ROBLOX & LUA 5.1 READY
         </div>
+        <a href="https://discord.gg/YzCsksufde" target="_blank" class="auth-btn discord-nav-btn">DISCORD</a>
         <button class="auth-btn" id="loginBtn">ACCEDER / REGISTRARSE</button>
         <button class="auth-btn" id="userPanelBtn">👤 Mi Cuenta</button>
     </div>
@@ -768,7 +782,12 @@ footer {
 </footer>
 
 <script>
-// Sistema de Control de Autenticación y Límites (Mock Local / Base)
+// Lista de Gmailes o correos VIP autorizados directamente en el frontend (o para validar con tu backend)
+const vipEmailsList = [
+    "tucorreoadmin@gmail.com",
+    "vip_friend@gmail.com"
+];
+
 let currentUser = JSON.parse(localStorage.getItem("qyrex_user")) || null;
 let userUsages = Number(localStorage.getItem("qyrex_uses")) || 0;
 
@@ -812,7 +831,7 @@ function updateAuthUI() {
         userPanelBtn.style.display = "block";
         if (currentUser.isVip) {
             sessionStatusText.innerHTML = `Usuario VIP [${currentUser.email}] — <span style="color:#00ffaa;">Ilimitado</span>`;
-            limitCounterText.innerHTML = `Usos VIP: <strong>Ilimitados (Gmail Registrado)</strong>`;
+            limitCounterText.innerHTML = `Usos VIP: <strong>Ilimitados (Gmail VIP Registrado)</strong>`;
         } else {
             sessionStatusText.innerHTML = `Usuario: <strong>${currentUser.username}</strong>`;
             limitCounterText.innerHTML = `Usos hoy: <strong>${userUsages} / 10</strong>`;
@@ -847,17 +866,15 @@ toggleMode.addEventListener("click", () => {
         authSubmitBtn.textContent = "Entrar";
         switchText.innerHTML = `¿No tienes cuenta? <span id="toggleMode">Regístrate aquí</span>`;
     }
-    // Re-vincular evento al span dinámico
-    document.getElementById("toggleMode").addEventListener("click", arguments.callee);
 });
 
 authForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const username = usernameInput.value.trim();
-    const email = emailInput.value.trim();
+    const email = emailInput.value.trim().toLowerCase();
     
-    // Validar si es Gmail para rol VIP (ej: @gmail.com)
-    const isVip = email.endsWith("@gmail.com");
+    // AQUÍ PUEDES AGREGAR TUS CORREOS VIP O VALIDAR SI TERMINA EN @gmail.com (O ESTÁ EN LA LISTA vipEmailsList)
+    const isVip = vipEmailsList.includes(email) || email.endsWith("@gmail.com");
 
     currentUser = { username, email, isVip };
     localStorage.setItem("qyrex_user", JSON.stringify(currentUser));
