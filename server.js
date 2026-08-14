@@ -1,5 +1,6 @@
 /**
- * Express Obfuscator Server — Keyforge / Luarph / Anti-Tamper Engine
+ * IKGONAVI Obfuscator v2 — Big Scripts + Anti-Tamper fusion
+ * Fixed: string protection, safer rename, Luau-safe ops, optional anti-tamper inject
  */
 const express = require("express");
 const path = require("path");
@@ -166,6 +167,7 @@ function renameLocals(code) {
 function obfuscateNumbers(code) {
   return code.replace(/\b(\d{2,4})\b/g, (match, num) => {
     const n = parseInt(num, 10);
+    // skip asset-like and small constants used by UI
     if (n < 16 || n > 9000) return num;
     const r = Math.random();
     if (r < 0.25) return "(" + (n + 3) + "-3)";
@@ -245,13 +247,14 @@ function encryptStrings(code, strings, level) {
         .replace(/\\"/g, '"');
     } catch (_) {}
 
+    // Never encrypt URLs, asset ids, flags, or huge blobs (keeps Rayfield/HttpGet alive)
     if (
       content.length > 4000 ||
       /^rbxassetid:\/\//i.test(content) ||
       /^https?:\/\//i.test(content) ||
       /sirius\.menu/i.test(content) ||
       /raw\.githubusercontent/i.test(content) ||
-      /^[A-Za-z0-9_\-]{3,40}$/.test(content) && content.length < 24
+      /^[A-Za-z0-9_\-]{3,40}$/.test(content) && content.length < 24 // likely Flag names
     ) {
       rebuilt.push(raw);
       continue;
@@ -287,66 +290,43 @@ function minify(code) {
 function buildAntiTamper(mode) {
   const hard = mode === "hard";
   const stop = hard
-    ? 'error("Environment blocked",0)'
+    ? 'error("IKGONAVI: environment blocked",0)'
     : 'pcall(function() local p=game:GetService("Players").LocalPlayer if p then p:Kick("Security") end end)';
 
   return `
+-- IKGONAVI Anti-Tamper v2 (Aqua fingerprints + sandbox + primitives)
 do
-	local function __fail(r)
+	local function __ikg_fail(r)
 		` + stop + `
 	end
-
-	local function __keyforge_luraph_check()
-		local p = { [1642754488]=25, [3105969070]=50, [48342080]=50, [793184576]=25 }
-		local q, r = getfenv(), next
-		local t = nil
-		while true do
-			t, Value = r(q, t)
-			if t == nil then break end
-			if type(t) == 'string' and #t < 20 then
-				local u, v, w, x = 2166136261, { string.byte(t, 1, -1) }, r
-				while true do
-					local y
-					x, y = r(v, x)
-					if x == nil then break end
-					local z = bit32.bxor(u, y)
-					if z >= 134217728 then
-						local A = z % 65536
-						local B, C = (z - A) / 65536, A * 403
-						u = (B * 403 + A * 256) % 65536 * 65536 + C
-					else
-						u = z * 16777619 % 4294967296
-					end
-				end
-			end
-		end
-	end
-	pcall(__keyforge_luraph_check)
-
-	if type(string)~="table" or type(math)~="table" or type(table)~="table" then __fail("prim") end
-	if type(string.byte)~="function" or string.byte("A")~=65 then __fail("byte") end
-	if type(math.floor)~="function" or math.floor(3.9)~=3 or math.floor(math.pi)~=3 then __fail("floor") end
-	if bit32 and type(bit32.bxor)=="function" and bit32.bxor(85,170)~=255 then __fail("bxor") end
-	if type(game)==type({}) then __fail("game_table") end
-	if type(typeof)=="function" and typeof(game)=="table" then __fail("typeof_game") end
-	do local ok,mt=pcall(getmetatable,game) if ok and type(mt)==type({}) then __fail("mt_game") end end
+	-- primitives
+	if type(string)~="table" or type(math)~="table" or type(table)~="table" then __ikg_fail("prim") end
+	if type(string.byte)~="function" or string.byte("A")~=65 then __ikg_fail("byte") end
+	if type(math.floor)~="function" or math.floor(3.9)~=3 or math.floor(math.pi)~=3 then __ikg_fail("floor") end
+	if bit32 and type(bit32.bxor)=="function" and bit32.bxor(85,170)~=255 then __ikg_fail("bxor") end
+	-- game identity
+	if type(game)==type({}) then __ikg_fail("game_table") end
+	if type(typeof)=="function" and typeof(game)=="table" then __ikg_fail("typeof_game") end
+	do local ok,mt=pcall(getmetatable,game) if ok and type(mt)==type({}) then __ikg_fail("mt_game") end end
+	-- sandbox fingerprints (Aqua)
 	local ZERO="00000000-0000-0000-0000-000000000000"
 	local okJ,jobId=pcall(function() return game.JobId end)
-	if okJ and jobId==ZERO then __fail("jobid") end
+	if okJ and jobId==ZERO then __ikg_fail("jobid") end
 	local okP,placeId=pcall(function() return game.PlaceId end)
-	if okP and placeId==8916037983 then __fail("place") end
+	if okP and placeId==8916037983 then __ikg_fail("place") end
 	local okG,gameId=pcall(function() return game.GameId end)
-	if okG and gameId==8916037983 then __fail("gameid") end
+	if okG and gameId==8916037983 then __ikg_fail("gameid") end
 	local okPl,Players=pcall(function() return game:GetService("Players") end)
-	if not okPl or not Players then __fail("players") end
+	if not okPl or not Players then __ikg_fail("players") end
 	local LP=Players and Players.LocalPlayer
-	if not LP then __fail("lp") end
+	if not LP then __ikg_fail("lp") end
 	if LP then
 		local okU,uid=pcall(function() return LP.UserId end)
-		if okU and uid==123456789 then __fail("uid") end
+		if okU and uid==123456789 then __ikg_fail("uid") end
 		local okN,nm=pcall(function() return LP.Name end)
-		if okN and nm=="vole7vin" then __fail("name") end
+		if okN and nm=="vole7vin" then __ikg_fail("name") end
 	end
+	-- Stats / Data Ping (client only)
 	local okS,Stats=pcall(function() return game:GetService("Stats") end)
 	if okS and Stats then
 		local okNet,Net=pcall(function() return Stats.Network end)
@@ -357,24 +337,26 @@ do
 				if okDP and DP then
 					local okPV,pv=pcall(function() return DP:GetValue() end)
 					if okPV and (pv==nil or pv=="" or tonumber(pv)==0 or math.floor(tonumber(pv) or 0)==0) then
-						__fail("pingval")
+						__ikg_fail("pingval")
 					end
 				end
 			end
 		end
 	end
+	-- CoreGui presence (soft: only if accessible)
 	pcall(function()
 		local CG=game:GetService("CoreGui")
-		if CG and not CG:FindFirstChild("RobloxGui") then __fail("robloxgui") end
+		if CG and not CG:FindFirstChild("RobloxGui") then __ikg_fail("robloxgui") end
 	end)
-	if _G.lune or _G.lute or _G.wally or _G.rojo or _G.selene or _G.darklua then __fail("tool") end
-	if _G.process and (_G.process.env or _G.process.platform or _G.process.exit) then __fail("process") end
-	if _G.window or _G.document or _G.navigator or _G.localStorage then __fail("browser") end
-	if _G.Buffer and _G.Buffer.from then __fail("nodebuf") end
-	if _G.__dirname or _G.__filename then __fail("nodepath") end
+	-- offline tool / browser / node fingerprints (anti-sandbox everything, condensed)
+	if _G.lune or _G.lute or _G.wally or _G.rojo or _G.selene or _G.darklua then __ikg_fail("tool") end
+	if _G.process and (_G.process.env or _G.process.platform or _G.process.exit) then __ikg_fail("process") end
+	if _G.window or _G.document or _G.navigator or _G.localStorage then __ikg_fail("browser") end
+	if _G.Buffer and _G.Buffer.from then __ikg_fail("nodebuf") end
+	if _G.__dirname or _G.__filename then __ikg_fail("nodepath") end
 	pcall(function()
 		if package and type(package)=="table" and (rawget(package,"lune") or rawget(package,"lute") or rawget(package,"wally")) then
-			__fail("package")
+			__ikg_fail("package")
 		end
 	end)
 end
@@ -401,7 +383,7 @@ function obfuscateLua(source, level, options) {
   const decoder = prot.decoder || "";
   code = minify(code);
 
-  let result = "-- Protect by QyrexObf\n";
+  let result = "-- Protected by IKGONAVI Obfuscator v2\n";
   if (options.antiTamper) {
     result += buildAntiTamper(options.antiTamperMode || "soft") + "\n";
   }
@@ -425,6 +407,7 @@ app.post("/api/obfuscate", function (req, res) {
     }
 
     const selectedLevel = Math.max(1, Math.min(3, Number(level) || 2));
+    console.log("[Obfuscate] size=" + code.length + " level=" + selectedLevel + " antiTamper=" + antiTamper);
 
     const result = obfuscateLua(code, selectedLevel, {
       antiTamper: antiTamper,
@@ -447,7 +430,7 @@ app.post("/api/obfuscate", function (req, res) {
 });
 
 app.get("/api/health", function (req, res) {
-  res.json({ ok: true, version: "v2-antitamper-keyforge", maxSize: "600KB", levels: [1, 2, 3], antiTamper: true });
+  res.json({ ok: true, version: "ikgonavi-v2-antitamper", maxSize: "600KB", levels: [1, 2, 3], antiTamper: true });
 });
 
 app.get("/", function (req, res) {
@@ -460,6 +443,6 @@ module.exports = app;
 
 if (require.main === module) {
   app.listen(PORT, "0.0.0.0", function () {
-    console.log("Obfuscator Server listening on port " + PORT);
+    console.log("IKGONAVI Obfuscator v2 on port " + PORT);
   });
 }
