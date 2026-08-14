@@ -2,7 +2,7 @@
 
 const crypto = require("crypto");
 const fs = require("fs");
-const http = http = require("http");
+const http = require("http");
 const path = require("path");
 
 const PORT = Number(process.env.PORT || 3000);
@@ -128,7 +128,7 @@ function decodeShortString(raw) {
   return out;
 }
 
-// Payload anti-tamper limpio en Lua (Extraído de estructuras verificadas)
+// Payload anti-tamper limpio en Lua
 const AQUA_ANTI_TAMPER_CODE = `
 -- Aqua Obfuscator v1 - Anti-Tamper Check
 local _aqConfig = { Mode = "enforce", DebugReasons = false }
@@ -146,7 +146,7 @@ function obfuscate(source, options = {}) {
 
   const tokens = tokenize(code);
   const encryptStrings = options.encryptStrings !== false;
-  const includeAntiTamper = options.antiTamper === true; // Nueva opción configurable
+  const includeAntiTamper = options.antiTamper === true;
 
   const renameMap = new Map();
   let counter = 0;
@@ -222,9 +222,7 @@ function obfuscate(source, options = {}) {
     ? `local ${decName}=function(t)local k={${keyArr}}local r={}for i=1,#t do r[i]=string.char(bit32.bxor(t[i],k[(i-1)%#k+1]))end return table.concat(r)end;`
     : "";
 
-  // Añadir el bloque anti-tamper de manera segura sin corromper el ofuscado
   const antiTamperPayload = includeAntiTamper ? AQUA_ANTI_TAMPER_CODE : "";
-
   const result = `-- Protect by QyrexObf\n${antiTamperPayload}\n${decoder}${body}`;
 
   return {
