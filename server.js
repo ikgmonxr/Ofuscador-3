@@ -14,34 +14,46 @@ const DATA_FILE = path.join(__dirname, 'data.json');
 // ====================== MIDDLEWARE ======================
 app.use(cors());
 
-// Aumentamos el límite de JSON y URL Encoded a 50mb para soportar scripts gigantes
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Aumentamos los límites a 100mb para asegurar que scripts gigantes no den error de payload
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300
+  max: 500 // Subimos un poco el límite por las peticiones de Roblox
 });
 app.use('/api/', limiter);
 
 // ====================== DATA ======================
 function loadData() {
-  if (!fs.existsSync(DATA_FILE)) {
-    const initial = {
-      scripts: [],
-      keys: [],
-      visits: [],
-      totalVisits: 0
-    };
-    fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2));
+  try {
+    if (!fs.existsSync(DATA_FILE)) {
+      const initial = {
+        scripts: [],
+        keys: [],
+        visits: [],
+        totalVisits: 0
+      };
+      fs.writeFileSync(DATA_FILE, JSON.stringify(initial));
+      return initial;
+    }
+    const fileContent = fs.readFileSync(DATA_FILE, 'utf8');
+    return JSON.parse(fileContent);
+  } catch (err) {
+    console.error("Error al leer data.json:", err);
+    return { scripts: [], keys: [], visits: [], totalVisits: 0 };
   }
-  return JSON.parse(fs.readFileSync(DATA_FILE));
 }
 
 function saveData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  try {
+    // Usamos stringify sin espacios (null, 2) si el archivo pesa mucho para ahorrar espacio y evitar lag
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data));
+  } catch (err) {
+    console.error("Error al guardar data.json:", err);
+  }
 }
 
 // ====================== API DE SCRIPTS (protegida) ======================
@@ -68,7 +80,7 @@ app.get('/api/script/:id', (req, res) => {
     return res.status(401).json({ error: "API Key inválida o expirada" });
   }
 
-  // Contar visita
+  // Contar visita de forma segura
   script.visits = (script.visits || 0) + 1;
   data.totalVisits = (data.totalVisits || 0) + 1;
   data.visits.push({
@@ -76,10 +88,11 @@ app.get('/api/script/:id', (req, res) => {
     time: new Date().toISOString(),
     key: key.slice(0, 8) + "..."
   });
-  if (data.visits.length > 500) data.visits = data.visits.slice(-500);
+  if (data.visits.length > 200) data.visits = data.visits.slice(-200); // Reducido para evitar saturar el JSON
   saveData(data);
 
-  res.set('Content-Type', 'text/plain');
+  // Enviar texto plano optimizado para Roblox
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.send(script.code);
 });
 
@@ -164,10 +177,7 @@ app.get('/api/admin/stats', (req, res) => {
 });
 
 // ====================== FRONTEND ======================
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: "Ruta de API no encontrada" });
-  }
+app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
