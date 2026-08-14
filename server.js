@@ -1,5 +1,5 @@
 /**
- * QyrexObf Engine — Ultimate Single-Line Obfuscator & Hard Anti-Tamper
+ * QyrexObf Engine — Bytecode Payload Loader & Single-Line Engine
  */
 const express = require("express");
 const path = require("path");
@@ -279,6 +279,32 @@ do local function __ikg_fail(r) ${stop} end local function __keyforge_luraph_che
 `.trim();
 }
 
+/**
+ * Encapsula la totalidad del código Lua generado dentro de una secuencia de bytes cifrada.
+ * SynCrypt no podrá leer sentencias AST estándar ya que todo estará empaquetado.
+ */
+function wrapPayloadInByteLoader(payload) {
+  const key = crypto.randomBytes(8);
+  const buffer = Buffer.from(payload, "utf8");
+  const encryptedBytes = [];
+
+  for (let i = 0; i < buffer.length; i++) {
+    encryptedBytes.push(buffer[i] ^ key[i % key.length]);
+  }
+
+  const keyArr = "{" + Array.from(key).join(",") + "}";
+  const byteData = "{" + encryptedBytes.join(",") + "}";
+
+  const v_data = ln();
+  const v_key = ln();
+  const v_out = ln();
+  const v_i = ln();
+  const v_b = ln();
+  const v_load = ln();
+
+  return `local ${v_data}=${byteData} local ${v_key}=${keyArr} local ${v_out}={} for ${v_i}=1,#${v_data} do local ${v_b}=bit32.bxor(${v_data}[${v_i}],${v_key}[(${v_i}-1)%#${v_key}+1]) ${v_out}[${v_i}]=string.char(${v_b}) end local ${v_load}=assert(loadstring or load)(table.concat(${v_out})) return ${v_load}()`;
+}
+
 function obfuscateLua(source) {
   let code = String(source || "").trim();
   if (!code) throw new Error("Empty script");
@@ -287,7 +313,7 @@ function obfuscateLua(source) {
   code = stripComments(extracted.code);
   const strings = extracted.strings;
 
-  // Max Obfuscation Steps
+  // Transformaciones de código
   code = renameLocals(code);
   code = obfuscateNumbers(code);
   code = injectJunk(code);
@@ -296,11 +322,14 @@ function obfuscateLua(source) {
   code = prot.code;
   const decoder = prot.decoder || "";
 
-  // Combine Anti-Tamper + Decoder + Code into a single string stream
-  let payload = buildAntiTamper() + " " + decoder + " " + code;
-  payload = toSingleLine(payload);
+  // Fusionamos Anti-Tamper + Decodificador + Código en un solo bloque
+  let rawPayload = buildAntiTamper() + " " + decoder + " " + code;
+  rawPayload = toSingleLine(rawPayload);
 
-  return "-- Protect by QyrexObf\n" + payload;
+  // Encriptación total a Bytecode Dynamic Loader
+  const finalObfuscatedPayload = wrapPayloadInByteLoader(rawPayload);
+
+  return "-- Protect by QyrexObf\n" + finalObfuscatedPayload;
 }
 
 app.post("/api/obfuscate", function (req, res) {
@@ -314,7 +343,7 @@ app.post("/api/obfuscate", function (req, res) {
       return res.status(400).json({ error: "Script demasiado grande (max ~600KB)." });
     }
 
-    console.log("[Obfuscate] Processing max security single-line build, size=" + code.length);
+    console.log("[Obfuscate] Processing max security single-line byte loader, size=" + code.length);
 
     const result = obfuscateLua(code);
 
@@ -332,7 +361,7 @@ app.post("/api/obfuscate", function (req, res) {
 });
 
 app.get("/api/health", function (req, res) {
-  res.json({ ok: true, version: "QyrexObf-v1-singleline", maxSize: "600KB" });
+  res.json({ ok: true, version: "QyrexObf-v2-byteloader", maxSize: "600KB" });
 });
 
 app.get("/", function (req, res) {
