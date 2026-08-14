@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IKGONAVI — Lua Obfuscator (Definitivo)</title>
+<title>IKGONAVI — Lua Obfuscator (Mejorado)</title>
 <style>
 * {
     box-sizing: border-box;
@@ -275,37 +275,9 @@ select {
 .small-button:hover {
     color: white;
 }
-.features {
+.info-box {
     width: min(1000px, 92%);
-    margin: 70px auto 0;
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 15px;
-}
-.feature {
-    padding: 22px;
-    border: 1px solid rgba(255,255,255,.055);
-    border-radius: 14px;
-    background: rgba(9,15,27,.55);
-}
-.feature-number {
-    color: #328fff;
-    font-size: 10px;
-    font-weight: 800;
-}
-.feature h3 {
-    margin: 11px 0 7px;
-    font-size: 13px;
-}
-.feature p {
-    margin: 0;
-    color: #64738a;
-    font-size: 11px;
-    line-height: 1.6;
-}
-.alert {
-    width: min(900px, 92%);
-    margin: 40px auto;
+    margin: 30px auto;
     padding: 15px 20px;
     border-left: 3px solid #3be69b;
     background: rgba(59,230,155,.08);
@@ -313,6 +285,42 @@ select {
     color: #7ee6b5;
     font-size: 12px;
     line-height: 1.5;
+}
+.warning-box {
+    width: min(1000px, 92%);
+    margin: 30px auto;
+    padding: 15px 20px;
+    border-left: 3px solid #ffa500;
+    background: rgba(255,165,0,.08);
+    border-radius: 8px;
+    color: #ffb74d;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    width: min(1000px, 92%);
+    margin: 30px auto;
+}
+.stat-card {
+    padding: 15px;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px;
+    background: rgba(9,15,27,.55);
+    text-align: center;
+}
+.stat-value {
+    font-size: 24px;
+    font-weight: 800;
+    color: #42b5ff;
+    margin-bottom: 5px;
+}
+.stat-label {
+    font-size: 11px;
+    color: #64738a;
+    letter-spacing: 1px;
 }
 footer {
     padding: 55px 0 30px;
@@ -334,8 +342,8 @@ footer {
         width: 220px;
         margin: 0 auto;
     }
-    .features {
-        grid-template-columns: 1fr;
+    .stats {
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 </style>
@@ -346,12 +354,12 @@ footer {
         <div class="logo-box">I</div>
         <div class="logo-text">
             <strong>IKGONAVI</strong>
-            <small>DEFINITIVO</small>
+            <small>MEJORADO</small>
         </div>
     </div>
     <div class="status-badge">
         <span class="status-dot"></span>
-        100% ROBLOX
+        BIGSCRIPTS
     </div>
 </header>
 
@@ -359,16 +367,16 @@ footer {
     <div class="tag">✦ LUA / ROBLOX OBFUSCATOR</div>
     <h1>
         Protege tu código.<br>
-        <span class="gradient">Oculta tu lógica.</span>
+        <span class="gradient">Ahora con scripts grandes.</span>
     </h1>
     <p>
-        Obfuscador potente y compatible con Roblox.
-        Variables renombradas, strings cifrados y junk code. Sin load/loadstring.
+        Obfuscador potente compatible con Roblox.
+        Soporta scripts de hasta 500KB sin problemas.
     </p>
 </section>
 
-<div class="alert">
-    ✓ VERSIÓN DEFINITIVA: Completamente compatible con Roblox sin errores de load() o loadstring()
+<div class="info-box">
+    ✓ VERSIÓN MEJORADA: Optimizada para scripts grandes (10K+ líneas)
 </div>
 
 <section class="workspace">
@@ -385,11 +393,10 @@ footer {
             id="input"
             spellcheck="false"
             placeholder="-- Pega tu script Lua / Roblox aquí
-local player = game.Players.LocalPlayer
-print(player.Name)"
+-- Funciona con scripts de cualquier tamaño (hasta 500KB)"
         ></textarea>
         <div class="editor-bottom">
-            <span id="inputInfo">0 characters</span>
+            <span id="inputInfo">0 caracteres</span>
             <select id="level">
                 <option value="1">BASIC</option>
                 <option value="2" selected>ADVANCED</option>
@@ -419,27 +426,33 @@ print(player.Name)"
             placeholder="Tu código protegido aparecerá aquí..."
         ></textarea>
         <div class="editor-bottom">
-            <span id="outputInfo">0 characters</span>
+            <span id="outputInfo">0 caracteres</span>
             <span id="result">LISTO</span>
         </div>
     </div>
 </section>
 
-<section class="features">
-    <div class="feature">
-        <div class="feature-number">01</div>
-        <h3>Variable Protection</h3>
-        <p>Renombra variables locales con nombres aleatorios y ofuscados.</p>
+<section class="stats" id="statsContainer" style="display: none;">
+    <div class="stat-card">
+        <div class="stat-value" id="compressionStat">0%</div>
+        <div class="stat-label">COMPRESIÓN</div>
     </div>
-    <div class="feature">
-        <div class="feature-number">02</div>
-        <h3>String Encryption</h3>
-        <p>Cifrado XOR de strings con decodificación en tiempo de ejecución.</p>
+    <div class="stat-card">
+        <div class="stat-value" id="timeStat">0ms</div>
+        <div class="stat-label">TIEMPO</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="levelStat">-</div>
+        <div class="stat-label">NIVEL</div>
     </div>
 </section>
 
+<div class="warning-box" id="warningBox" style="display: none;">
+    ⚠️ <span id="warningText"></span>
+</div>
+
 <footer>
-    © 2026 IKGONAVI • Lua Obfuscator Definitivo
+    © 2026 IKGONAVI • Lua Obfuscator Mejorado • Máx 500KB
 </footer>
 
 <script>
@@ -453,10 +466,20 @@ const inputInfo = document.getElementById("inputInfo");
 const outputInfo = document.getElementById("outputInfo");
 const status = document.getElementById("status");
 const result = document.getElementById("result");
+const statsContainer = document.getElementById("statsContainer");
+const warningBox = document.getElementById("warningBox");
 
 function counters() {
-    inputInfo.textContent = `${input.value.length.toLocaleString()} characters`;
-    outputInfo.textContent = `${output.value.length.toLocaleString()} characters`;
+    const inputLen = input.value.length;
+    inputInfo.textContent = `${inputLen.toLocaleString()} caracteres`;
+    outputInfo.textContent = `${output.value.length.toLocaleString()} caracteres`;
+    
+    if (inputLen > 100000) {
+        warningBox.style.display = "block";
+        document.getElementById("warningText").textContent = "Script muy grande (" + (inputLen / 1024).toFixed(0) + "KB). Procesamiento puede tardar más.";
+    } else {
+        warningBox.style.display = "none";
+    }
 }
 
 input.addEventListener("input", counters);
@@ -466,6 +489,8 @@ clear.addEventListener("click", () => {
     output.value = "";
     result.textContent = "LISTO";
     status.textContent = "Listo para procesar";
+    statsContainer.style.display = "none";
+    warningBox.style.display = "none";
     counters();
 });
 
@@ -487,10 +512,13 @@ button.addEventListener("click", async () => {
         input.focus();
         return;
     }
+    
+    const startTime = performance.now();
     button.disabled = true;
     button.textContent = "◌ PROCESSING...";
-    status.textContent = "Enviando a motor de ofuscación...";
+    status.textContent = "Procesando script grande...";
     result.textContent = "PROCESANDO";
+    statsContainer.style.display = "none";
     
     try {
         const response = await fetch("/api/obfuscate", {
@@ -502,23 +530,30 @@ button.addEventListener("click", async () => {
             })
         });
         
+        const endTime = performance.now();
+        const processingTime = (endTime - startTime).toFixed(0);
+        
         const data = await response.json();
         
         if (!response.ok) {
-            throw new Error(data.error || "Ofuscación fallida");
+            throw new Error(data.error || "Obfuscación fallida");
         }
         
         output.value = data.code;
         counters();
         result.textContent = "PROTEGIDO";
-        status.textContent = "Ofuscación completada ✓";
+        status.textContent = "✓ Obfuscación completada";
         
-        if (data.warning) {
-            status.textContent = data.warning;
-        }
+        // Mostrar estadísticas
+        statsContainer.style.display = "grid";
+        document.getElementById("compressionStat").textContent = data.compressionRatio || "0%";
+        document.getElementById("timeStat").textContent = processingTime + "ms";
+        document.getElementById("levelStat").textContent = data.level === 1 ? "BASIC" : "ADVANCED";
+        
     } catch (error) {
         result.textContent = "ERROR";
         status.textContent = error.message;
+        statsContainer.style.display = "none";
     } finally {
         button.disabled = false;
         button.textContent = "✦ OBFUSCATE";
