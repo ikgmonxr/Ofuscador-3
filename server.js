@@ -1,69 +1,702 @@
-const express = require('express');
-const expressWs = require('express-ws');
-const path = require('path');
-const cors = require('cors');
-
-const app = express();
-expressWs(app);
-
-const PORT = process.env.PORT || 3000;
-
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// Servir la carpeta web
-app.use(express.static(path.join(__dirname, 'public')));
-
-// ==========================================
-// MOTOR DE OFUSCACIÓN EN EL SERVIDOR
-// ==========================================
-function obfuscateLua(code) {
-    if (!code || code.trim() === '') return '';
-
-    // Convertir código Lua a bytes encodeados en Hexadecimal
-    const bytes = Array.from(Buffer.from(code, 'utf-8'));
-    const hexArray = bytes.map(b => `\\x${b.toString(16).padStart(2, '0')}`).join('');
-    
-    // Generación de variables aleatorias estilo Lua
-    const var1 = "_" + Math.random().toString(36).substring(2, 9);
-    const var2 = "_" + Math.random().toString(36).substring(2, 9);
-    const var3 = "_" + Math.random().toString(36).substring(2, 9);
-
-    // Template del cargador y desempaquetador dinámico Lua
-    const obfuscatedTemplate = `--[[
-    [ OBFUSCATED BY IKGOFORGE BUILDER ]
-    Protected Lua Script - Authorized Executions Only
---]]
-local ${var1} = "${hexArray}"
-local ${var2} = {}
-for ${var3} in ${var1}:gmatch("\\x(%x%x)") do
-    table.insert(${var2}, string.char(tonumber(${var3}, 16)))
-end
-local _exec = loadstring or load
-_exec(table.concat(${var2}))()`;
-
-    return obfuscatedTemplate;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IKGONAVI — Lua Obfuscator</title>
+<style>
+* {
+    box-sizing: border-box;
 }
-
-// Endpoint para recibir el código y devolverlo ofuscado
-app.post('/api/obfuscate', (req, res) => {
-    try {
-        const { code } = req.body;
-        if (!code) {
-            return res.status(400).json({ error: 'No se envió código para ofuscar.' });
-        }
-
-        const obfuscated = obfuscateLua(code);
-        return res.json({ success: true, result: obfuscated });
-    } catch (err) {
-        return res.status(500).json({ error: 'Error interno al procesar el script.' });
+html {
+    scroll-behavior: smooth;
+}
+body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+        radial-gradient(
+            circle at 50% -20%,
+            rgba(39, 137, 255, .30),
+            transparent 40%
+        ),
+        #040811;
+    color: #f5f8ff;
+    font-family:
+        Inter,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Arial,
+        sans-serif;
+}
+/* BACKGROUND */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(
+            rgba(255,255,255,.018) 1px,
+            transparent 1px
+        ),
+        linear-gradient(
+            90deg,
+            rgba(255,255,255,.018) 1px,
+            transparent 1px
+        );
+    background-size: 45px 45px;
+    mask-image:
+        linear-gradient(
+            to bottom,
+            black,
+            transparent
+        );
+}
+/* NAVBAR */
+.navbar {
+    width: min(1180px, 92%);
+    height: 76px;
+    margin: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.logo-box {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border-radius: 11px;
+    background:
+        linear-gradient(
+            135deg,
+            #4bbcff,
+            #2468ff
+        );
+    box-shadow:
+        0 0 30px
+        rgba(42, 139, 255, .35);
+    font-weight: 900;
+    font-size: 20px;
+}
+.logo-text strong {
+    display: block;
+    font-size: 14px;
+    letter-spacing: 2px;
+}
+.logo-text small {
+    display: block;
+    margin-top: 2px;
+    color: #5f718b;
+    font-size: 8px;
+    letter-spacing: 2px;
+}
+.online {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #7e91ac;
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+.online-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #3be69b;
+    box-shadow:
+        0 0 12px
+        rgba(59,230,155,.8);
+}
+/* HERO */
+.hero {
+    width: min(900px, 92%);
+    margin: auto;
+    padding:
+        90px
+        0
+        65px;
+    text-align: center;
+}
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding:
+        8px
+        13px;
+    border:
+        1px solid
+        rgba(69,156,255,.25);
+    border-radius: 100px;
+    background:
+        rgba(33,114,218,.09);
+    color: #7fc1ff;
+    font-size: 9px;
+    letter-spacing: 1.7px;
+}
+.hero h1 {
+    margin:
+        24px
+        0
+        18px;
+    font-size:
+        clamp(45px, 7vw, 78px);
+    line-height: .96;
+    letter-spacing: -4px;
+}
+.gradient {
+    background:
+        linear-gradient(
+            90deg,
+            #5ac2ff,
+            #3579ff
+        );
+    color: transparent;
+    background-clip: text;
+    -webkit-background-clip: text;
+}
+.hero p {
+    max-width: 580px;
+    margin: auto;
+    color: #71829c;
+    line-height: 1.7;
+    font-size: 14px;
+}
+/* WORKSPACE */
+.workspace {
+    width: min(1180px, 92%);
+    margin: auto;
+    display: grid;
+    grid-template-columns:
+        minmax(0, 1fr)
+        120px
+        minmax(0, 1fr);
+    align-items: center;
+    gap: 20px;
+}
+/* EDITOR */
+.editor {
+    overflow: hidden;
+    border:
+        1px solid
+        rgba(101,153,211,.16);
+    border-radius: 16px;
+    background:
+        rgba(8,14,26,.90);
+    box-shadow:
+        0 30px 80px
+        rgba(0,0,0,.30);
+    transition: .2s;
+}
+.editor:focus-within {
+    border-color:
+        rgba(63,156,255,.45);
+    box-shadow:
+        0 0 0 1px
+        rgba(63,156,255,.08),
+        0 30px 80px
+        rgba(0,0,0,.30);
+}
+.editor-top {
+    height: 52px;
+    padding:
+        0
+        16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom:
+        1px solid
+        rgba(255,255,255,.05);
+}
+.file {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: #9baac0;
+    font-size: 11px;
+}
+.file-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4ab2ff;
+    box-shadow:
+        0 0 10px
+        rgba(74,178,255,.5);
+}
+.file-dot.green {
+    background: #38e69a;
+    box-shadow:
+        0 0 10px
+        rgba(56,230,154,.5);
+}
+.editor textarea {
+    display: block;
+    width: 100%;
+    height: 320px;
+    padding: 20px;
+    border: 0;
+    outline: 0;
+    resize: none;
+    background:
+        #060b14;
+    color: #cfe3ff;
+    font-family:
+        Consolas,
+        "Courier New",
+        monospace;
+    font-size: 13px;
+    line-height: 1.7;
+}
+.editor textarea::placeholder {
+    color: #34445b;
+}
+.editor-bottom {
+    height: 46px;
+    padding:
+        0
+        15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #52647d;
+    font-size: 9px;
+}
+select {
+    padding:
+        7px
+        10px;
+    border:
+        1px solid
+        #243a58;
+    border-radius: 7px;
+    outline: none;
+    background:
+        #0a1322;
+    color: #9bb1cd;
+    font-size: 9px;
+    cursor: pointer;
+}
+/* BUTTON */
+.action {
+    text-align: center;
+}
+#obfuscate {
+    width: 100%;
+    padding:
+        14px
+        8px;
+    border: 0;
+    border-radius: 10px;
+    background:
+        linear-gradient(
+            135deg,
+            #42b5ff,
+            #276bff
+        );
+    color: white;
+    font-weight: 800;
+    font-size: 10px;
+    letter-spacing: .8px;
+    cursor: pointer;
+    box-shadow:
+        0 15px 35px
+        rgba(35,116,255,.22);
+    transition: .2s;
+}
+#obfuscate:hover {
+    transform:
+        translateY(-2px);
+    box-shadow:
+        0 18px 45px
+        rgba(35,116,255,.35);
+}
+#obfuscate:disabled {
+    opacity: .55;
+    cursor: wait;
+    transform: none;
+}
+.action p {
+    margin:
+        10px
+        0
+        0;
+    color: #43536a;
+    font-size: 8px;
+    line-height: 1.4;
+}
+/* BUTTONS */
+.small-button {
+    border: 0;
+    background: transparent;
+    color: #63738c;
+    font-size: 9px;
+    cursor: pointer;
+}
+.small-button:hover {
+    color: white;
+}
+/* FEATURES */
+.features {
+    width: min(1000px, 92%);
+    margin:
+        70px
+        auto
+        0;
+    display: grid;
+    grid-template-columns:
+        repeat(3, 1fr);
+    gap: 15px;
+}
+.feature {
+    padding: 22px;
+    border:
+        1px solid
+        rgba(255,255,255,.055);
+    border-radius: 14px;
+    background:
+        rgba(9,15,27,.55);
+}
+.feature-number {
+    color: #328fff;
+    font-size: 10px;
+    font-weight: 800;
+}
+.feature h3 {
+    margin:
+        11px
+        0
+        7px;
+    font-size: 13px;
+}
+.feature p {
+    margin: 0;
+    color: #64738a;
+    font-size: 11px;
+    line-height: 1.6;
+}
+/* FOOTER */
+footer {
+    padding:
+        55px
+        0
+        30px;
+    text-align: center;
+    color: #35445b;
+    font-size: 9px;
+}
+/* MOBILE */
+@media (max-width: 850px) {
+    .hero {
+        padding-top: 60px;
     }
-});
-
-// Inicialización
-app.listen(PORT, () => {
-    console.log(`=================================`);
-    console.log(`🚀 Servidor ejecutándose en: http://localhost:${PORT}`);
-    console.log(`=================================`);
-});
+    .hero h1 {
+        letter-spacing: -2px;
+    }
+    .workspace {
+        grid-template-columns: 1fr;
+    }
+    .action {
+        width: 220px;
+        margin: 0 auto;
+    }
+    .features {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+</head>
+<body>
+<header class="navbar">
+    <div class="logo">
+        <div class="logo-box">
+            I
+        </div>
+        <div class="logo-text">
+            <strong>IKGONAVI</strong>
+            <small>OBFUSCATOR</small>
+        </div>
+    </div>
+    <div class="online">
+        <span class="online-dot"></span>
+        ENGINE ONLINE
+    </div>
+</header>
+<section class="hero">
+    <div class="tag">
+        ✦ LUA / ROBLOX PROTECTION ENGINE
+    </div>
+    <h1>
+        Protect your code.<br>
+        <span class="gradient">
+            Hide your logic.
+        </span>
+    </h1>
+    <p>
+        Ofuscador potente para scripts Lua orientado a Roblox.
+        Variables renombradas, strings cifrados, junk code y capa Extreme con encoding completo.
+    </p>
+</section>
+<section class="workspace">
+    <!-- INPUT -->
+    <div class="editor">
+        <div class="editor-top">
+            <div class="file">
+                <span class="file-dot"></span>
+                script.lua
+            </div>
+            <button
+                class="small-button"
+                id="clear"
+            >
+                CLEAR
+            </button>
+        </div>
+        <textarea
+            id="input"
+            spellcheck="false"
+            placeholder="-- Paste your Lua / Roblox script here
+local player = game.Players.LocalPlayer
+print(player.Name)"
+        ></textarea>
+        <div class="editor-bottom">
+            <span id="inputInfo">
+                0 characters
+            </span>
+            <select id="level">
+                <option value="1">
+                    BASIC
+                </option>
+                <option value="2">
+                    ADVANCED
+                </option>
+                <option value="3" selected>
+                    EXTREME
+                </option>
+            </select>
+        </div>
+    </div>
+    <!-- ACTION -->
+    <div class="action">
+        <button id="obfuscate">
+            ✦ &nbsp; OBFUSCATE
+        </button>
+        <p id="status">
+            Ready to process
+        </p>
+    </div>
+    <!-- OUTPUT -->
+    <div class="editor">
+        <div class="editor-top">
+            <div class="file">
+                <span class="file-dot green"></span>
+                protected.lua
+            </div>
+            <button
+                class="small-button"
+                id="copy"
+            >
+                COPY
+            </button>
+        </div>
+        <textarea
+            id="output"
+            readonly
+            spellcheck="false"
+            placeholder="Your protected code will appear here..."
+        ></textarea>
+        <div class="editor-bottom">
+            <span id="outputInfo">
+                0 characters
+            </span>
+            <span id="result">
+                READY
+            </span>
+        </div>
+    </div>
+</section>
+<section class="features">
+    <div class="feature">
+        <div class="feature-number">
+            01
+        </div>
+        <h3>
+            Variable Protection
+        </h3>
+        <p>
+            Renombra variables locales de forma agresiva con nombres hex y aleatorios.
+        </p>
+    </div>
+    <div class="feature">
+        <div class="feature-number">
+            02
+        </div>
+        <h3>
+            String Encryption
+        </h3>
+        <p>
+            Cifrado XOR de strings + decoder en runtime (Advanced / Extreme).
+        </p>
+    </div>
+    <div class="feature">
+        <div class="feature-number">
+            03
+        </div>
+        <h3>
+            Extreme Layer
+        </h3>
+        <p>
+            Encoding completo del script + loadstring. Muy difícil de leer a mano.
+        </p>
+    </div>
+</section>
+<footer>
+    © 2026 IKGONAVI • Lua / Roblox Obfuscator
+</footer>
+<script>
+const input =
+    document.getElementById("input");
+const output =
+    document.getElementById("output");
+const level =
+    document.getElementById("level");
+const button =
+    document.getElementById("obfuscate");
+const clear =
+    document.getElementById("clear");
+const copy =
+    document.getElementById("copy");
+const inputInfo =
+    document.getElementById("inputInfo");
+const outputInfo =
+    document.getElementById("outputInfo");
+const status =
+    document.getElementById("status");
+const result =
+    document.getElementById("result");
+function counters() {
+    inputInfo.textContent =
+        `${input.value.length.toLocaleString()} characters`;
+    outputInfo.textContent =
+        `${output.value.length.toLocaleString()} characters`;
+}
+input.addEventListener(
+    "input",
+    counters
+);
+clear.addEventListener(
+    "click",
+    () => {
+        input.value = "";
+        output.value = "";
+        result.textContent =
+            "READY";
+        status.textContent =
+            "Ready to process";
+        counters();
+    }
+);
+copy.addEventListener(
+    "click",
+    async () => {
+        if (!output.value) {
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(
+                output.value
+            );
+            copy.textContent =
+                "COPIED ✓";
+            setTimeout(
+                () => {
+                    copy.textContent =
+                        "COPY";
+                },
+                1300
+            );
+        } catch {
+            output.select();
+            document.execCommand(
+                "copy"
+            );
+        }
+    }
+);
+button.addEventListener(
+    "click",
+    async () => {
+        if (!input.value.trim()) {
+            status.textContent =
+                "Paste a Lua script first";
+            input.focus();
+            return;
+        }
+        button.disabled = true;
+        button.textContent =
+            "◌ PROCESSING...";
+        status.textContent =
+            "Sending script to engine...";
+        result.textContent =
+            "PROCESSING";
+        try {
+            const response =
+                await fetch(
+                    "/api/obfuscate",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+                        body: JSON.stringify({
+                            code:
+                                input.value,
+                            level:
+                                Number(
+                                    level.value
+                                )
+                        })
+                    }
+                );
+            const data =
+                await response.json();
+            if (!response.ok) {
+                throw new Error(
+                    data.error ||
+                    "Obfuscation failed"
+                );
+            }
+            output.value =
+                data.code;
+            counters();
+            result.textContent =
+                "PROTECTED";
+            status.textContent =
+                "Obfuscation completed ✓";
+        } catch (error) {
+            result.textContent =
+                "ERROR";
+            status.textContent =
+                error.message;
+        } finally {
+            button.disabled =
+                false;
+            button.textContent =
+                "✦ OBFUSCATE";
+        }
+    }
+);
+counters();
+</script>
+</body>
+</html>
