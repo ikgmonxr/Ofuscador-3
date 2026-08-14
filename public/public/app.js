@@ -1,407 +1,69 @@
-"use strict";
+const express = require('express');
+const expressWs = require('express-ws');
+const path = require('path');
+const cors = require('cors');
 
-const inputCode =
-    document.getElementById(
-        "inputCode"
-    );
+const app = express();
+expressWs(app);
 
-const outputCode =
-    document.getElementById(
-        "outputCode"
-    );
+const PORT = process.env.PORT || 3000;
 
-const protectBtn =
-    document.getElementById(
-        "protectBtn"
-    );
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-const protectText =
-    document.getElementById(
-        "protectText"
-    );
+// Servir la carpeta web
+app.use(express.static(path.join(__dirname, 'public')));
 
-const spinner =
-    document.getElementById(
-        "spinner"
-    );
+// ==========================================
+// MOTOR DE OFUSCACIÓN EN EL SERVIDOR
+// ==========================================
+function obfuscateLua(code) {
+    if (!code || code.trim() === '') return '';
 
-const clearBtn =
-    document.getElementById(
-        "clearBtn"
-    );
+    // Convertir código Lua a bytes encodeados en Hexadecimal
+    const bytes = Array.from(Buffer.from(code, 'utf-8'));
+    const hexArray = bytes.map(b => `\\x${b.toString(16).padStart(2, '0')}`).join('');
+    
+    // Generación de variables aleatorias estilo Lua
+    const var1 = "_" + Math.random().toString(36).substring(2, 9);
+    const var2 = "_" + Math.random().toString(36).substring(2, 9);
+    const var3 = "_" + Math.random().toString(36).substring(2, 9);
 
-const copyBtn =
-    document.getElementById(
-        "copyBtn"
-    );
+    // Template del cargador y desempaquetador dinámico Lua
+    const obfuscatedTemplate = `--[[
+    [ OBFUSCATED BY IKGOFORGE BUILDER ]
+    Protected Lua Script - Authorized Executions Only
+--]]
+local ${var1} = "${hexArray}"
+local ${var2} = {}
+for ${var3} in ${var1}:gmatch("\\x(%x%x)") do
+    table.insert(${var2}, string.char(tonumber(${var3}, 16)))
+end
+local _exec = loadstring or load
+_exec(table.concat(${var2}))()`;
 
-const inputSize =
-    document.getElementById(
-        "inputSize"
-    );
-
-const outputSize =
-    document.getElementById(
-        "outputSize"
-    );
-
-const message =
-    document.getElementById(
-        "message"
-    );
-
-const status =
-    document.getElementById(
-        "status"
-    );
-
-const levelButtons =
-    document.querySelectorAll(
-        ".level"
-    );
-
-let selectedLevel = 1;
-
-
-/* =========================================================
-   HELPERS
-   ========================================================= */
-
-function updateSize() {
-    inputSize.textContent =
-        `${inputCode.value.length.toLocaleString()} caracteres`;
-
-    outputSize.textContent =
-        `${outputCode.value.length.toLocaleString()} caracteres`;
+    return obfuscatedTemplate;
 }
 
-function setMessage(
-    text,
-    type = ""
-) {
-    message.textContent = text;
-
-    message.className =
-        "message " + type;
-}
-
-function setLoading(
-    loading
-) {
-    protectBtn.disabled =
-        loading;
-
-    spinner.classList.toggle(
-        "hidden",
-        !loading
-    );
-
-    protectText.textContent =
-        loading
-            ? "PROCESANDO..."
-            : "PROTEGER";
-}
-
-
-/* =========================================================
-   LEVEL SELECTOR
-   ========================================================= */
-
-levelButtons.forEach(
-    button => {
-        button.addEventListener(
-            "click",
-            () => {
-                levelButtons.forEach(
-                    item =>
-                        item.classList.remove(
-                            "active"
-                        )
-                );
-
-                button.classList.add(
-                    "active"
-                );
-
-                selectedLevel =
-                    Number(
-                        button.dataset.level
-                    );
-
-                setMessage("");
-            }
-        );
-    }
-);
-
-
-/* =========================================================
-   INPUT
-   ========================================================= */
-
-inputCode.addEventListener(
-    "input",
-    updateSize
-);
-
-
-/* =========================================================
-   CLEAR
-   ========================================================= */
-
-clearBtn.addEventListener(
-    "click",
-    () => {
-        inputCode.value = "";
-        outputCode.value = "";
-
-        updateSize();
-
-        setMessage("");
-
-        inputCode.focus();
-    }
-);
-
-
-/* =========================================================
-   COPY
-   ========================================================= */
-
-copyBtn.addEventListener(
-    "click",
-    async () => {
-        const text =
-            outputCode.value;
-
-        if (!text) {
-            setMessage(
-                "No hay código para copiar.",
-                "error"
-            );
-
-            return;
-        }
-
-        try {
-            await navigator.clipboard.writeText(
-                text
-            );
-
-            setMessage(
-                "Código copiado.",
-                "success"
-            );
-
-            setTimeout(
-                () => setMessage(""),
-                1800
-            );
-        } catch {
-            outputCode.focus();
-            outputCode.select();
-
-            document.execCommand(
-                "copy"
-            );
-
-            setMessage(
-                "Código copiado.",
-                "success"
-            );
-        }
-    }
-);
-
-
-/* =========================================================
-   PROTECT
-   ========================================================= */
-
-protectBtn.addEventListener(
-    "click",
-    async () => {
-        const code =
-            inputCode.value;
-
-        if (!code.trim()) {
-            setMessage(
-                "Pega un script Lua/Luau primero.",
-                "error"
-            );
-
-            inputCode.focus();
-
-            return;
-        }
-
-        setLoading(true);
-
-        setMessage(
-            "Procesando..."
-        );
-
-        try {
-            const response =
-                await fetch(
-                    "/api/obfuscate",
-                    {
-                        method: "POST",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        body:
-                            JSON.stringify({
-                                code,
-                                level:
-                                    selectedLevel
-                            })
-                    }
-                );
-
-            let data;
-
-            try {
-                data =
-                    await response.json();
-            } catch {
-                throw new Error(
-                    "El servidor devolvió una respuesta inválida."
-                );
-            }
-
-            if (
-                !response.ok ||
-                !data.success
-            ) {
-                throw new Error(
-                    data.error ||
-                    "No se pudo proteger el código."
-                );
-            }
-
-            outputCode.value =
-                data.code || "";
-
-            updateSize();
-
-            setMessage(
-                `Protegido correctamente · nivel ${data.level}`,
-                "success"
-            );
-
-        } catch (error) {
-            console.error(
-                error
-            );
-
-            setMessage(
-                error.message ||
-                "Error de conexión.",
-                "error"
-            );
-
-        } finally {
-            setLoading(false);
-        }
-    }
-);
-
-
-/* =========================================================
-   HEALTH CHECK
-   ========================================================= */
-
-async function checkServer() {
+// Endpoint para recibir el código y devolverlo ofuscado
+app.post('/api/obfuscate', (req, res) => {
     try {
-        const response =
-            await fetch(
-                "/api/health",
-                {
-                    cache: "no-store"
-                }
-            );
-
-        if (!response.ok) {
-            throw new Error();
+        const { code } = req.body;
+        if (!code) {
+            return res.status(400).json({ error: 'No se envió código para ofuscar.' });
         }
 
-        const data =
-            await response.json();
-
-        if (data.ok) {
-            status.innerHTML =
-                `
-                <span class="status-dot"></span>
-                ONLINE
-                `;
-
-            return;
-        }
-
-        throw new Error();
-
-    } catch {
-        status.innerHTML =
-            `
-            <span
-                class="status-dot"
-                style="
-                    background:#ff6969;
-                    box-shadow:0 0 10px rgba(255,105,105,.6)
-                "
-            ></span>
-            OFFLINE
-            `;
+        const obfuscated = obfuscateLua(code);
+        return res.json({ success: true, result: obfuscated });
+    } catch (err) {
+        return res.status(500).json({ error: 'Error interno al procesar el script.' });
     }
-}
+});
 
-
-/* =========================================================
-   TAB KEY
-   ========================================================= */
-
-inputCode.addEventListener(
-    "keydown",
-    event => {
-        if (
-            event.key === "Tab"
-        ) {
-            event.preventDefault();
-
-            const start =
-                inputCode.selectionStart;
-
-            const end =
-                inputCode.selectionEnd;
-
-            inputCode.value =
-                inputCode.value.slice(
-                    0,
-                    start
-                ) +
-                "    " +
-                inputCode.value.slice(
-                    end
-                );
-
-            inputCode.selectionStart =
-                inputCode.selectionEnd =
-                    start + 4;
-
-            updateSize();
-        }
-    }
-);
-
-
-/* =========================================================
-   INITIAL
-   ========================================================= */
-
-updateSize();
-
-checkServer();
+// Inicialización
+app.listen(PORT, () => {
+    console.log(`=================================`);
+    console.log(`🚀 Servidor ejecutándose en: http://localhost:${PORT}`);
+    console.log(`=================================`);
+});
