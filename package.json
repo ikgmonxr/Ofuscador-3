@@ -1,12 +1,10 @@
 {
-  "name": "ikgonavi-obfuscator",
-  "version": "1.0.0",
+  "name": "ikgonavi",
+  "version": "8.0.0",
+  "description": "IKGONAVI Lua/Luau protection server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
-  },
-  "engines": {
-    "node": ">=18"
   },
   "dependencies": {
     "express": "^4.21.2"
