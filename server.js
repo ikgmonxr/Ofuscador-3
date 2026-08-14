@@ -1,116 +1,184 @@
+"use strict";
+
 const express = require("express");
 const path = require("path");
-const crypto = require("crypto");
 
 const app = express();
+
 const PORT = Number(process.env.PORT) || 3000;
-const MAX_SCRIPT_SIZE = 280000;
+const MAX_CODE_SIZE = 300000;
 
 app.disable("x-powered-by");
-app.use(express.json({ limit: "2mb" }));
-app.use(express.urlencoded({ extended: false, limit: "2mb" }));
 
-function isIdentStart(ch) {
-    return !!ch && /[A-Za-z_]/.test(ch);
-}
+app.use(
+    express.json({
+        limit: "2mb"
+    })
+);
 
-function isIdentPart(ch) {
-    return !!ch && /[A-Za-z0-9_]/.test(ch);
-}
+app.use(
+    express.urlencoded({
+        extended: false,
+        limit: "2mb"
+    })
+);
 
-function isDigit(ch) {
-    return !!ch && /[0-9]/.test(ch);
-}
+/* =========================================================
+   LUA / LUAU TOKENIZER
+   ========================================================= */
 
-function isSpace(ch) {
-    return !!ch && /\s/.test(ch);
-}
-
-const LUA_KEYWORDS = new Set([
-    "and", "break", "do", "else", "elseif", "end",
-    "false", "for", "function", "goto", "if", "in",
-    "local", "nil", "not", "or", "repeat", "return",
-    "then", "true", "until", "while"
+const KEYWORDS = new Set([
+    "and",
+    "break",
+    "do",
+    "else",
+    "elseif",
+    "end",
+    "false",
+    "for",
+    "function",
+    "goto",
+    "if",
+    "in",
+    "local",
+    "nil",
+    "not",
+    "or",
+    "repeat",
+    "return",
+    "then",
+    "true",
+    "until",
+    "while"
 ]);
 
-function isKeyword(word) {
-    return LUA_KEYWORDS.has(word);
+function isIdentifierStart(char) {
+    return !!char && /[A-Za-z_]/.test(char);
+}
+
+function isIdentifierPart(char) {
+    return !!char && /[A-Za-z0-9_]/.test(char);
+}
+
+function isDigit(char) {
+    return !!char && /[0-9]/.test(char);
+}
+
+function isWhitespace(char) {
+    return !!char && /\s/.test(char);
 }
 
 /*
- * Tokenizador Lua/Luau.
- * Mantiene strings y comentarios separados para evitar
- * modificar accidentalmente su contenido.
+ * Lee strings largas:
+ *
+ * [[ texto ]]
+ * [=[ texto ]=]
+ * [==[ texto ]==]
+ */
+function readLongString(source, start) {
+    if (source[start] !== "[") {
+        return null;
+    }
+
+    let i = start + 1;
+    let equals = 0;
+
+    while (source[i] === "=") {
+        equals++;
+        i++;
+    }
+
+    if (source[i] !== "[") {
+        return null;
+    }
+
+    const closing =
+        "]" +
+        "=".repeat(equals) +
+        "]";
+
+    const end =
+        source.indexOf(
+            closing,
+            i + 1
+        );
+
+    if (end === -1) {
+        return {
+            value: source.slice(start),
+            end: source.length
+        };
+    }
+
+    return {
+        value: source.slice(
+            start,
+            end + closing.length
+        ),
+        end:
+            end +
+            closing.length
+    };
+}
+
+/*
+ * Tokeniza sin modificar contenido.
  */
 function tokenizeLua(source) {
     const tokens = [];
+
     let i = 0;
-
-    function readLongBracket(start) {
-        if (source[start] !== "[") {
-            return null;
-        }
-
-        let j = start + 1;
-        let equals = 0;
-
-        while (source[j] === "=") {
-            equals++;
-            j++;
-        }
-
-        if (source[j] !== "[") {
-            return null;
-        }
-
-        const close = "]" + "=".repeat(equals) + "]";
-        const end = source.indexOf(close, j + 1);
-
-        if (end === -1) {
-            return {
-                value: source.slice(start),
-                end: source.length
-            };
-        }
-
-        return {
-            value: source.slice(start, end + close.length),
-            end: end + close.length
-        };
-    }
 
     while (i < source.length) {
         const c = source[i];
         const n = source[i + 1];
 
-        /*
-         * Whitespace
-         */
-        if (isSpace(c)) {
-            const start = i++;
+        /* ---------------------------------------------
+           whitespace
+        --------------------------------------------- */
 
-            while (i < source.length && isSpace(source[i])) {
+        if (isWhitespace(c)) {
+            const start = i;
+
+            i++;
+
+            while (
+                i < source.length &&
+                isWhitespace(source[i])
+            ) {
                 i++;
             }
 
             tokens.push({
-                type: "ws",
+                type: "whitespace",
                 value: source.slice(start, i)
             });
 
             continue;
         }
 
-        /*
-         * Comments
-         */
-        if (c === "-" && n === "-") {
-            const long = readLongBracket(i + 2);
+        /* ---------------------------------------------
+           comments
+        --------------------------------------------- */
+
+        if (
+            c === "-" &&
+            n === "-"
+        ) {
+            const long =
+                readLongString(
+                    source,
+                    i + 2
+                );
 
             if (long) {
                 tokens.push({
                     type: "comment",
-                    value: source.slice(i, long.end)
+                    value:
+                        source.slice(
+                            i,
+                            long.end
+                        )
                 });
 
                 i = long.end;
@@ -131,17 +199,26 @@ function tokenizeLua(source) {
 
             tokens.push({
                 type: "comment",
-                value: source.slice(start, i)
+                value:
+                    source.slice(
+                        start,
+                        i
+                    )
             });
 
             continue;
         }
 
-        /*
-         * Long strings
-         */
+        /* ---------------------------------------------
+           long strings
+        --------------------------------------------- */
+
         if (c === "[") {
-            const long = readLongBracket(i);
+            const long =
+                readLongString(
+                    source,
+                    i
+                );
 
             if (long) {
                 tokens.push({
@@ -150,21 +227,30 @@ function tokenizeLua(source) {
                 });
 
                 i = long.end;
+
                 continue;
             }
         }
 
-        /*
-         * Normal strings
-         */
-        if (c === "'" || c === '"') {
+        /* ---------------------------------------------
+           normal strings
+        --------------------------------------------- */
+
+        if (
+            c === "'" ||
+            c === '"'
+        ) {
             const quote = c;
-            const start = i++;
+            const start = i;
+
+            i++;
 
             let escaped = false;
 
             while (i < source.length) {
-                const ch = source[i++];
+                const ch = source[i];
+
+                i++;
 
                 if (escaped) {
                     escaped = false;
@@ -183,29 +269,42 @@ function tokenizeLua(source) {
 
             tokens.push({
                 type: "string",
-                value: source.slice(start, i)
+                value:
+                    source.slice(
+                        start,
+                        i
+                    )
             });
 
             continue;
         }
 
-        /*
-         * Identifiers
-         */
-        if (isIdentStart(c)) {
-            const start = i++;
+        /* ---------------------------------------------
+           identifiers
+        --------------------------------------------- */
+
+        if (isIdentifierStart(c)) {
+            const start = i;
+
+            i++;
 
             while (
                 i < source.length &&
-                isIdentPart(source[i])
+                isIdentifierPart(
+                    source[i]
+                )
             ) {
                 i++;
             }
 
-            const value = source.slice(start, i);
+            const value =
+                source.slice(
+                    start,
+                    i
+                );
 
             tokens.push({
-                type: isKeyword(value)
+                type: KEYWORDS.has(value)
                     ? "keyword"
                     : "identifier",
                 value
@@ -214,23 +313,46 @@ function tokenizeLua(source) {
             continue;
         }
 
-        /*
-         * Numbers
-         */
-        if (isDigit(c) || (c === "." && isDigit(n))) {
-            const start = i++;
+        /* ---------------------------------------------
+           numbers
+        --------------------------------------------- */
+
+        if (
+            isDigit(c) ||
+            (
+                c === "." &&
+                isDigit(n)
+            )
+        ) {
+            const start = i;
+
+            i++;
 
             while (i < source.length) {
-                const ch = source[i];
+                const ch =
+                    source[i];
 
-                if (/[A-Za-z0-9._]/.test(ch)) {
+                if (
+                    /[A-Za-z0-9._]/.test(
+                        ch
+                    )
+                ) {
                     i++;
                     continue;
                 }
 
+                /*
+                 * exponent signs
+                 */
                 if (
-                    (ch === "+" || ch === "-") &&
-                    /[eEpP]/.test(source[i - 1] || "")
+                    (
+                        ch === "+" ||
+                        ch === "-"
+                    ) &&
+                    /[eEpP]/.test(
+                        source[i - 1] ||
+                        ""
+                    )
                 ) {
                     i++;
                     continue;
@@ -241,36 +363,69 @@ function tokenizeLua(source) {
 
             tokens.push({
                 type: "number",
-                value: source.slice(start, i)
+                value:
+                    source.slice(
+                        start,
+                        i
+                    )
             });
 
             continue;
         }
 
-        /*
-         * Operadores
-         */
-        const three = source.slice(i, i + 3);
-        const two = source.slice(i, i + 2);
+        /* ---------------------------------------------
+           multi-character operators
+        --------------------------------------------- */
+
+        const three =
+            source.slice(
+                i,
+                i + 3
+            );
+
+        const two =
+            source.slice(
+                i,
+                i + 2
+            );
+
+        if (three === "...") {
+            tokens.push({
+                type: "symbol",
+                value: "..."
+            });
+
+            i += 3;
+
+            continue;
+        }
+
+        const twoOperators = new Set([
+            "==",
+            "~=",
+            "<=",
+            ">=",
+            "..",
+            "::",
+            "->"
+        ]);
 
         if (
-            three === "..." ||
-            two === "==" ||
-            two === "~=" ||
-            two === "<=" ||
-            two === ">=" ||
-            two === ".." ||
-            two === "::" ||
-            two === "->"
+            twoOperators.has(two)
         ) {
             tokens.push({
                 type: "symbol",
-                value: three.length === 3 ? three : two
+                value: two
             });
 
-            i += three.length === 3 ? 3 : 2;
+            i += 2;
+
             continue;
         }
+
+        /* ---------------------------------------------
+           single symbol
+        --------------------------------------------- */
 
         tokens.push({
             type: "symbol",
@@ -283,33 +438,68 @@ function tokenizeLua(source) {
     return tokens;
 }
 
-/*
- * Elimina comentarios sin tocar strings.
- */
-function stripComments(tokens) {
-    return tokens
-        .filter(token => token.type !== "comment")
-        .map(token => token.value)
-        .join("");
-}
+/* =========================================================
+   SAFE MINIFIER
+   ========================================================= */
 
-/*
- * Compacta el código.
- */
-function normalizeWhitespace(tokens) {
+function minifyTokens(tokens) {
     let output = "";
 
+    let previous = null;
+
     for (const token of tokens) {
-        if (token.type === "comment") {
+        if (
+            token.type === "comment"
+        ) {
             continue;
         }
 
-        if (token.type === "ws") {
-            if (/\r?\n/.test(token.value)) {
-                output += "\n";
-            } else if (
-                output &&
-                !/[ \n]$/.test(output)
+        if (
+            token.type === "whitespace"
+        ) {
+            /*
+             * No necesitamos conservar
+             * espacios alrededor de símbolos.
+             *
+             * Pero entre dos identificadores/números
+             * sí debemos dejar separación.
+             */
+            const next =
+                tokens[
+                    tokens.indexOf(token) + 1
+                ];
+
+            if (
+                previous &&
+                next &&
+                (
+                    (
+                        previous.type ===
+                        "identifier"
+                    ) ||
+                    (
+                        previous.type ===
+                        "keyword"
+                    ) ||
+                    (
+                        previous.type ===
+                        "number"
+                    )
+                ) &&
+                (
+                    (
+                        next.type ===
+                        "identifier"
+                    ) ||
+                    (
+                        next.type ===
+                        "keyword"
+                    ) ||
+                    (
+                        next.type ===
+                        "number"
+                    )
+                )
             ) {
                 output += " ";
             }
@@ -318,381 +508,184 @@ function normalizeWhitespace(tokens) {
         }
 
         output += token.value;
+
+        previous = token;
     }
 
-    return output
-        .replace(/[ \t]+\n/g, "\n")
-        .replace(/\n[ \t]+/g, "\n")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim();
+    return output.trim();
 }
+
+/* =========================================================
+   SAFE COMMENT REMOVER
+   ========================================================= */
+
+function removeComments(source) {
+    const tokens =
+        tokenizeLua(source);
+
+    return tokens
+        .filter(
+            token =>
+                token.type !==
+                "comment"
+        )
+        .map(
+            token =>
+                token.value
+        )
+        .join("");
+}
+
+/* =========================================================
+   SAFE STRING PRESERVATION
+   ========================================================= */
 
 /*
- * Renombrado conservador de variables locales.
+ * Esta función NO cifra ni reconstruye strings.
  *
- * No modifica:
- * - strings
- * - comentarios
- * - propiedades obj.foo
- * - globals arbitrarios
+ * Es intencional:
+ * reconstruir strings en runtime puede cambiar:
+ *
+ * - encoding
+ * - escapes
+ * - rendimiento
+ * - comportamiento de Roblox
  */
-function renameLocals(tokens) {
-    const reserved = new Set([
-        "self",
-        "script",
-        "game",
-        "workspace",
-        "shared",
-        "_G",
-        "_ENV"
-    ]);
 
-    const renameMap = new Map();
-    let counter = 0;
-
-    function nextName() {
-        const alphabet = "abcdefghijklmnopqrstuvwxyz";
-
-        let n = counter++;
-        let result = "";
-
-        do {
-            result =
-                alphabet[n % alphabet.length] +
-                result;
-
-            n = Math.floor(n / alphabet.length) - 1;
-        } while (n >= 0);
-
-        return "_" + result;
-    }
-
-    for (let i = 0; i < tokens.length; i++) {
-        const token = tokens[i];
-
-        if (
-            token.type !== "keyword" ||
-            token.value !== "local"
-        ) {
-            continue;
-        }
-
-        let j = i + 1;
-
-        while (
-            j < tokens.length &&
-            tokens[j].type === "ws"
-        ) {
-            j++;
-        }
-
-        /*
-         * local function foo()
-         */
-        if (
-            tokens[j] &&
-            tokens[j].type === "keyword" &&
-            tokens[j].value === "function"
-        ) {
-            j++;
-
-            while (
-                j < tokens.length &&
-                tokens[j].type === "ws"
-            ) {
-                j++;
-            }
-
-            if (
-                tokens[j] &&
-                tokens[j].type === "identifier" &&
-                !reserved.has(tokens[j].value)
-            ) {
-                const original = tokens[j].value;
-
-                if (!renameMap.has(original)) {
-                    renameMap.set(
-                        original,
-                        nextName()
-                    );
-                }
-            }
-
-            continue;
-        }
-
-        /*
-         * local a, b, c = ...
-         */
-        while (j < tokens.length) {
-            while (
-                j < tokens.length &&
-                tokens[j].type === "ws"
-            ) {
-                j++;
-            }
-
-            const current = tokens[j];
-
-            if (
-                !current ||
-                current.type !== "identifier"
-            ) {
-                break;
-            }
-
-            if (!reserved.has(current.value)) {
-                if (!renameMap.has(current.value)) {
-                    renameMap.set(
-                        current.value,
-                        nextName()
-                    );
-                }
-            }
-
-            j++;
-
-            while (
-                j < tokens.length &&
-                tokens[j].type === "ws"
-            ) {
-                j++;
-            }
-
-            if (
-                !tokens[j] ||
-                tokens[j].value !== ","
-            ) {
-                break;
-            }
-
-            j++;
-        }
-    }
-
-    if (!renameMap.size) {
-        return tokens;
-    }
-
-    return tokens.map((token, index) => {
-        if (token.type !== "identifier") {
-            return token;
-        }
-
-        const replacement =
-            renameMap.get(token.value);
-
-        if (!replacement) {
-            return token;
-        }
-
-        /*
-         * Nunca renombrar:
-         * obj.foo
-         */
-        let previous = index - 1;
-
-        while (
-            previous >= 0 &&
-            tokens[previous].type === "ws"
-        ) {
-            previous--;
-        }
-
-        if (
-            tokens[previous] &&
-            tokens[previous].value === "."
-        ) {
-            return token;
-        }
-
-        return {
-            ...token,
-            value: replacement
-        };
-    });
+function preserveStrings(source) {
+    return source;
 }
 
-function randomIdentifier() {
-    return "__" +
-        crypto.randomBytes(6).toString("hex");
-}
-
-function bytesToLuaString(bytes) {
-    const chunks = [];
-
-    for (let i = 0; i < bytes.length; i += 32) {
-        const part = bytes.subarray(
-            i,
-            i + 32
-        );
-
-        chunks.push(
-            part
-                .toString("hex")
-                .match(/.{1,2}/g)
-                .map(hex => "\\x" + hex)
-                .join("")
-        );
-    }
-
-    return chunks.join("");
-}
+/* =========================================================
+   SAFE NUMBER PRESERVATION
+   ========================================================= */
 
 /*
- * Nivel 3:
- * convierte el código a bytes UTF-8 y aplica XOR.
+ * NO modifica números.
  *
- * Así no se rompe UTF-8.
+ * El obfuscador anterior cambiaba:
+ *
+ * 100 -> (107-7)
+ *
+ * Eso no aporta suficiente protección para justificar
+ * el riesgo de alterar expresiones de Luau.
  */
-function buildProtectedLoader(source) {
-    const key = crypto.randomBytes(24);
 
-    const input = Buffer.from(
-        source,
-        "utf8"
-    );
-
-    const encrypted = Buffer.alloc(
-        input.length
-    );
-
-    for (let i = 0; i < input.length; i++) {
-        encrypted[i] =
-            input[i] ^
-            key[i % key.length];
-    }
-
-    const keyLua =
-        bytesToLuaString(key);
-
-    const dataLua =
-        bytesToLuaString(encrypted);
-
-    const keyName = randomIdentifier();
-    const dataName = randomIdentifier();
-    const decodeName = randomIdentifier();
-    const loadName = randomIdentifier();
-
-    return `-- Protected by IKGONAVI
-local ${keyName}="${keyLua}"
-local ${dataName}="${dataLua}"
-
-local function ${decodeName}(d,k)
-    local out={}
-
-    for i=1,#d do
-        local a=string.byte(d,i)
-        local b=string.byte(
-            k,
-            ((i-1)%#k)+1
-        )
-
-        out[i]=string.char(
-            bit32.bxor(a,b)
-        )
-    end
-
-    return table.concat(out)
-end
-
-local ${loadName}=loadstring or load
-
-if type(${loadName})~="function" then
-    error(
-        "IKG: loadstring/load is not available",
-        0
-    )
-end
-
-local __source=${decodeName}(
-    ${dataName},
-    ${keyName}
-)
-
-local __fn,__err=${loadName}(
-    __source
-)
-
-if type(__fn)~="function" then
-    error(
-        "IKG load failed: "..tostring(__err),
-        0
-    )
-end
-
-return __fn()
-`;
+function preserveNumbers(source) {
+    return source;
 }
+
+/* =========================================================
+   SAFE OBFUSCATION
+   ========================================================= */
 
 function obfuscateLua(source, level) {
-    if (typeof source !== "string") {
+    if (
+        typeof source !== "string"
+    ) {
         throw new TypeError(
             "El código debe ser texto."
         );
     }
 
-    const tokens =
-        tokenizeLua(source);
+    /*
+     * Nivel 1:
+     * solamente elimina comentarios.
+     */
 
-    let transformed =
-        tokens;
+    let code =
+        removeComments(
+            source
+        );
+
+    /*
+     * Nivel 2:
+     * preserva exactamente la semántica.
+     *
+     * No modifica:
+     * - locals
+     * - globals
+     * - propiedades
+     * - strings
+     * - números
+     */
 
     if (level >= 2) {
-        transformed =
-            renameLocals(transformed);
+        code =
+            preserveStrings(
+                code
+            );
+
+        code =
+            preserveNumbers(
+                code
+            );
     }
 
-    const clean =
-        normalizeWhitespace(
-            transformed
-        );
+    /*
+     * Nivel 3:
+     * minificación segura.
+     *
+     * No usa loadstring.
+     * No usa RC4.
+     * No usa XOR runtime.
+     * No cambia el entorno de Roblox.
+     */
 
-    if (level <= 1) {
-        return (
-            "-- Protected by IKGONAVI\n" +
-            clean
-        );
+    if (level >= 3) {
+        const tokens =
+            tokenizeLua(
+                code
+            );
+
+        code =
+            minifyTokens(
+                tokens
+            );
     }
 
-    if (level === 2) {
-        return (
-            "-- Protected by IKGONAVI\n" +
-            clean
-        );
-    }
-
-    return buildProtectedLoader(
-        clean
+    return (
+        "-- IKGONAVI PROTECTED\n" +
+        code
     );
 }
 
-function validateRequestCode(code) {
+/* =========================================================
+   VALIDATION
+   ========================================================= */
+
+function validateCode(code) {
     if (
-        typeof code !== "string" ||
-        !code.trim()
+        typeof code !== "string"
     ) {
-        return "No se recibió ningún script Lua.";
+        return "El código debe ser texto.";
+    }
+
+    if (!code.trim()) {
+        return "No se recibió ningún script Lua/Luau.";
     }
 
     if (
-        code.length >
-        MAX_SCRIPT_SIZE
+        Buffer.byteLength(
+            code,
+            "utf8"
+        ) > MAX_CODE_SIZE
     ) {
         return (
-            "Script demasiado grande. " +
-            "Máximo: " +
-            MAX_SCRIPT_SIZE +
-            " caracteres."
+            "El script es demasiado grande. " +
+            "Máximo permitido: " +
+            MAX_CODE_SIZE +
+            " bytes."
         );
     }
 
     return null;
 }
 
-/*
- * POST /api/obfuscate
- */
+/* =========================================================
+   API
+   ========================================================= */
+
 app.post(
     "/api/obfuscate",
     (req, res) => {
@@ -700,30 +693,37 @@ app.post(
             const code =
                 req.body?.code;
 
-            const levelRaw =
+            const requestedLevel =
                 Number(
                     req.body?.level ?? 1
                 );
 
-            const validationError =
-                validateRequestCode(code);
+            const validation =
+                validateCode(
+                    code
+                );
 
-            if (validationError) {
-                return res.status(400).json({
-                    success: false,
-                    error: validationError
-                });
+            if (validation) {
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        error: validation
+                    });
             }
 
             if (
-                !Number.isFinite(levelRaw)
+                !Number.isFinite(
+                    requestedLevel
+                )
             ) {
-                return res.status(400).json({
-                    success: false,
-                    error:
-                        "El nivel debe ser " +
-                        "un número entre 1 y 3."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        error:
+                            "El nivel debe ser 1, 2 o 3."
+                    });
             }
 
             const level =
@@ -731,7 +731,9 @@ app.post(
                     1,
                     Math.min(
                         3,
-                        Math.trunc(levelRaw)
+                        Math.trunc(
+                            requestedLevel
+                        )
                     )
                 );
 
@@ -744,118 +746,155 @@ app.post(
             return res.json({
                 success: true,
                 code: result,
+                level,
+
                 originalSize:
                     Buffer.byteLength(
                         code,
                         "utf8"
                     ),
+
                 outputSize:
                     Buffer.byteLength(
                         result,
                         "utf8"
-                    ),
-                level
+                    )
             });
-
         } catch (error) {
             console.error(
-                "[obfuscate]",
+                "[IKGONAVI]",
                 error
             );
 
-            return res.status(500).json({
-                success: false,
-                error:
-                    "Error interno: " +
-                    (
-                        error?.message ||
-                        "unknown"
-                    )
-            });
+            return res
+                .status(500)
+                .json({
+                    success: false,
+                    error:
+                        "Error interno: " +
+                        (
+                            error.message ||
+                            "unknown"
+                        )
+                });
         }
     }
 );
 
-/*
- * GET /api/health
- */
+/* =========================================================
+   HEALTH
+   ========================================================= */
+
 app.get(
     "/api/health",
     (_req, res) => {
         res.json({
+            success: true,
             ok: true,
-            version: "v8-stable",
-            maxScriptSize:
-                MAX_SCRIPT_SIZE
+            name: "IKGONAVI",
+            version: "8.0.0",
+            status: "online"
         });
     }
 );
 
-/*
- * Página principal
- */
+/* =========================================================
+   FRONTEND
+   ========================================================= */
+
+const publicDir =
+    path.join(
+        __dirname,
+        "public"
+    );
+
+app.use(
+    express.static(
+        publicDir
+    )
+);
+
 app.get(
     "/",
     (_req, res) => {
         res.sendFile(
             path.join(
-                __dirname,
-                "public",
+                publicDir,
                 "index.html"
             )
         );
     }
 );
 
-/*
- * Archivos públicos
- */
-app.use(
-    express.static(
-        path.join(
-            __dirname,
-            "public"
-        )
-    )
-);
+/* =========================================================
+   INVALID JSON
+   ========================================================= */
 
-/*
- * JSON inválido
- */
 app.use(
-    (err, _req, res, _next) => {
+    (
+        error,
+        _req,
+        res,
+        _next
+    ) => {
         if (
-            err instanceof SyntaxError &&
-            "body" in err
+            error instanceof
+            SyntaxError
         ) {
-            return res.status(400).json({
-                success: false,
-                error: "JSON inválido."
-            });
+            return res
+                .status(400)
+                .json({
+                    success: false,
+                    error:
+                        "JSON inválido."
+                });
         }
 
         console.error(
-            "[server]",
-            err
+            error
         );
 
-        return res.status(500).json({
-            success: false,
-            error:
-                "Error interno del servidor."
-        });
+        return res
+            .status(500)
+            .json({
+                success: false,
+                error:
+                    "Error interno del servidor."
+            });
     }
 );
 
-if (require.main === module) {
+/* =========================================================
+   START
+   ========================================================= */
+
+if (
+    require.main === module
+) {
     app.listen(
         PORT,
         "0.0.0.0",
         () => {
+            console.log("");
             console.log(
-                `IKGONAVI v8 STABLE ` +
-                `running on port ${PORT}`
+                "================================"
             );
+            console.log(
+                "        IKGONAVI v8"
+            );
+            console.log(
+                "        SERVER ONLINE"
+            );
+            console.log(
+                "================================"
+            );
+            console.log(
+                "Port: " + PORT
+            );
+            console.log(
+                "API: /api/obfuscate"
+            );
+            console.log("");
         }
     );
 }
