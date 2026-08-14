@@ -14,7 +14,7 @@ const DATA_FILE = path.join(__dirname, 'data.json');
 // ====================== MIDDLEWARE ======================
 app.use(cors());
 
-// Límites de tamaño ampliados para soportar scripts ofuscados gigantes
+// Aumentamos el límite de JSON y URL Encoded a 50mb para soportar scripts gigantes
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -47,11 +47,17 @@ function saveData(data) {
 // ====================== API DE SCRIPTS (protegida) ======================
 function isBrowser(req) {
   const ua = (req.headers['user-agent'] || '').toLowerCase();
+  
+  // Excepción estricta: Si el request viene explícitamente de Roblox o se identifica como cliente de juego, ignoramos el bloqueo de navegador
+  if (ua.includes('roblox') || ua.includes('synapse') || ua.includes('scriptware') || ua.includes('electron') || ua.includes('fluxus')) {
+    return false;
+  }
+
   return ua.includes('mozilla') || ua.includes('chrome') || ua.includes('safari') || ua.includes('firefox') || ua.includes('edge');
 }
 
 app.get('/api/script/:id', (req, res) => {
-  // Nota: Si algún ejecutor causa problemas por el User-Agent, puedes comentar este bloque temporalmente
+  // Bloquear navegadores web comunes para proteger el script
   if (isBrowser(req)) {
     return res.status(403).json({
       error: "Endpoint bloqueado",
