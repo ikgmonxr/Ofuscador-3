@@ -5,8 +5,8 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "50mb" }));
 
-// (Opcional) Si usas archivos web estáticos en una carpeta "public":
-// app.use(express.static(path.join(__dirname, "public")));
+// Habilitar la carpeta pública para servir el index.html
+app.use(express.static(path.join(__dirname, "public")));
 
 const RESERVED = new Set([
   "and","break","do","else","elseif","end","false","for","function","goto","if","in",
@@ -200,15 +200,6 @@ function obfuscate(code, level) {
 
   return DTC_ANTI_TAMPER_HEADER + "\n" + decoderHeader + "\n" + processedCode;
 }
-
-// Ruta raíz (Maneja GET /)
-app.get("/", (req, res) => {
-  res.json({
-    status: "ok",
-    service: "Obfuscator Engine",
-    version: "v3-pro-antitamper"
-  });
-});
 
 app.post("/api/obfuscate", (req, res) => {
   try {
