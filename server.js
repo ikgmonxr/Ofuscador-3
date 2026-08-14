@@ -4,22 +4,23 @@ const crypto = require("crypto");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ limit: "10mb" }));
 
-/* OBFUSCADOR DEFINITIVO - Exploits Grandes Sin Romper */
+/* IKGONAVI MEJORADO - Big Scripts Support */
 
 const RESERVED = new Set([
-  "and","break","do","else","elseif","end","false","for","function","goto","if","in",
-  "local","nil","not","or","repeat","return","then","true","until","while","_G","_ENV",
-  "self","game","workspace","script","require","Instance","Enum","Color3","Vector3","CFrame",
-  "TweenInfo","task","wait","spawn","delay","tick","time","os","math","string","table",
-  "pairs","ipairs","next","type","typeof","print","warn","error","pcall","xpcall","select",
-  "unpack","rawget","rawset","rawequal","setmetatable","getmetatable","coroutine","debug",
-  "utf8","bit32","getgenv","setgenv","hookmetamethod","checkcaller","Drawing","windui"
+  "and","break","do","else","elseif","end","false","for","function",
+  "goto","if","in","local","nil","not","or","repeat","return","then",
+  "true","until","while","_G","_ENV","self","game","workspace","script",
+  "require","Instance","Enum","Color3","Vector3","CFrame","TweenInfo",
+  "task","wait","spawn","delay","tick","time","os","math","string",
+  "table","pairs","ipairs","next","type","typeof","print","warn","error",
+  "pcall","xpcall","select","unpack","rawget","rawset","rawequal",
+  "setmetatable","getmetatable","coroutine","debug","utf8","bit32"
 ]);
 
 function rnd(n) {
-  n = n || 8;
+  n = n || 6;
   const a = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const b = a + "0123456789";
   let s = a[(Math.random() * 52) | 0];
@@ -27,19 +28,19 @@ function rnd(n) {
   return s;
 }
 
-function safeVarName() {
-  return "_" + rnd(12);
+function ln() {
+  const p = "abcdefghijkmnopqrstuvwxyz";
+  return "_" + p[(Math.random() * p.length) | 0] + rnd(5);
 }
 
-function stripComments(code) {
+function stripCommentsImproved(code) {
   let result = "";
   let i = 0;
-  
   while (i < code.length) {
     // Detectar strings
     if (code[i] === '"' || code[i] === "'") {
       const quote = code[i];
-      result += quote;
+      result += code[i];
       i++;
       while (i < code.length) {
         if (code[i] === "\\") {
@@ -47,9 +48,11 @@ function stripComments(code) {
           if (i + 1 < code.length) {
             result += code[i + 1];
             i += 2;
-          } else i++;
+          } else {
+            i++;
+          }
         } else if (code[i] === quote) {
-          result += quote;
+          result += code[i];
           i++;
           break;
         } else {
@@ -58,27 +61,40 @@ function stripComments(code) {
         }
       }
     }
-    // Multiline comments --[[...]]
-    else if (code[i] === "-" && code[i+1] === "-" && code[i+2] === "[" && code[i+3] === "[") {
-      let j = i + 4;
-      while (j < code.length - 1) {
-        if (code[j] === "]" && code[j+1] === "]") {
-          i = j + 2;
-          break;
-        }
+    // Detectar comentarios multilinea
+    else if (code[i] === "-" && code[i + 1] === "-" && code[i + 2] === "[") {
+      let bracketCount = 0;
+      let j = i + 3;
+      while (j < code.length && code[j] === "=") {
+        bracketCount++;
         j++;
       }
-      if (j >= code.length - 1) i = code.length;
-    }
-    // Single line comments
-    else if (code[i] === "-" && code[i+1] === "-") {
-      while (i < code.length && code[i] !== "\n") i++;
-      if (code[i] === "\n") {
-        result += "\n";
+      if (code[j] === "[") {
+        // Es comentario multilinea
+        j++;
+        let endStr = "]" + "=".repeat(bracketCount) + "]";
+        while (j < code.length) {
+          if (code.substr(j, endStr.length) === endStr) {
+            i = j + endStr.length;
+            break;
+          }
+          j++;
+        }
+        if (j >= code.length) i = code.length;
+      } else {
+        result += code[i];
         i++;
       }
     }
-    else {
+    // Detectar comentarios de línea
+    else if (code[i] === "-" && code[i + 1] === "-") {
+      i += 2;
+      while (i < code.length && code[i] !== "\n") i++;
+      if (i < code.length && code[i] === "\n") {
+        result += "\n";
+        i++;
+      }
+    } else {
       result += code[i];
       i++;
     }
@@ -86,45 +102,45 @@ function stripComments(code) {
   return result;
 }
 
-function renameVariables(code) {
+function renameLocalsImproved(code) {
   const map = new Map();
   let counter = 0;
 
-  // Find all local declarations
-  const pattern = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+  // Buscar todos los nombres de variables locales
+  const regex = /\blocal\s+([A-Za-z_][A-Za-z0-9_]*)/g;
   let match;
-  while ((match = pattern.exec(code)) !== null) {
+  while ((match = regex.exec(code)) !== null) {
     const name = match[1];
     if (!map.has(name) && !RESERVED.has(name)) {
       counter++;
-      map.set(name, safeVarName());
+      map.set(name, ln() + counter);
     }
   }
 
-  // Replace in order of length (longest first to avoid partial replacements)
-  let result = code;
+  // Reemplazar en orden de longitud descendente (para evitar reemplazos parciales)
   const entries = [...map.entries()].sort((a, b) => b[0].length - a[0].length);
-
+  
+  let result = code;
   for (const [oldName, newName] of entries) {
-    const regex = new RegExp("\\b" + oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g");
-    result = result.replace(regex, newName);
+    // Usar regex word boundary para reemplazos exactos
+    const pattern = new RegExp("\\b" + oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g");
+    result = result.replace(pattern, newName);
   }
 
   return result;
 }
 
-function obfuscateNumbers(code) {
-  return code.replace(/\b(\d{2,6})\b/g, (match, num) => {
+function obfuscateNumbersImproved(code) {
+  return code.replace(/\b(\d{2,5})\b/g, (match, num) => {
     const n = parseInt(num, 10);
-    if (n < 10 || n > 100000) return num;
-    const r = Math.random();
-    if (r < 0.3) return `(${n + Math.floor(Math.random() * 10)}-${Math.floor(Math.random() * 10)})`;
-    if (r < 0.6) return `(${n * 2}//2)`;
+    if (n < 12 || n > 50000) return num;
+    if (Math.random() < 0.35) return "(" + (n + 7) + "-7)";
+    if (Math.random() < 0.4) return "(" + (n * 2) + "//2)";
     return num;
   });
 }
 
-function injectNoise(code) {
+function injectJunkImproved(code) {
   const lines = code.split("\n");
   const result = [];
 
@@ -133,147 +149,169 @@ function injectNoise(code) {
     result.push(line);
 
     const trimmed = line.trim();
-    const endsUnsafe = /function\s*$|then\s*$|else\s*$|do\s*$|repeat\s*$|,\s*$|\(\s*$|\{\s*$|=\s*$/.test(trimmed);
-    const isComment = trimmed.startsWith("--");
+    const endsUnsafe =
+      /function\s*$/.test(trimmed) ||
+      /then\s*$/.test(trimmed) ||
+      /else\s*$/.test(trimmed) ||
+      /do\s*$/.test(trimmed) ||
+      /repeat\s*$/.test(trimmed) ||
+      /,\s*$/.test(trimmed) ||
+      /\(\s*$/.test(trimmed) ||
+      /\{\s*$/.test(trimmed) ||
+      /=\s*$/.test(trimmed);
 
-    if (trimmed.length > 10 && !endsUnsafe && !isComment && Math.random() > 0.8) {
-      const varName = safeVarName();
-      result.push(`local ${varName}=nil`);
+    if (trimmed.length > 15 && !endsUnsafe && !trimmed.startsWith("--") && Math.random() > 0.75) {
+      const varName = ln();
+      result.push("local " + varName + "=nil");
     }
   }
 
   return result.join("\n");
 }
 
-function encryptStrings(code) {
+function protectStringsImproved(code, level) {
   const strings = [];
-  let idx = 0;
+  let stringId = 0;
 
-  // Extract all strings
+  // Extraer strings de forma más robusta
   code = code.replace(/(["'])(?:\\.|(?!\1)[\s\S])*?\1/g, (match) => {
     strings.push(match);
-    return `__STR_${idx++}__`;
+    return "___STR_" + (stringId++) + "___";
   });
 
-  // Strip comments AFTER extracting strings
-  code = stripComments(code);
+  code = stripCommentsImproved(code);
 
-  // Create decoder function
-  const key = crypto.randomBytes(16).toString("hex");
+  if (level < 2) {
+    // Nivel 1: Solo restaurar
+    for (let i = 0; i < strings.length; i++) {
+      code = code.replace("___STR_" + i + "___", strings[i]);
+    }
+    return { code, decoder: "" };
+  }
+
+  // Nivel 2: Encripción XOR simple pero segura
+  const key = crypto.randomBytes(8).toString("hex");
+  const decName = ln();
   const keyBytes = Buffer.from(key, "utf8");
-  const decoderName = safeVarName();
 
-  let decoder = `local ${decoderName}={}\n`;
-  decoder += `function ${decoderName}:dec(t,k)\n`;
-  decoder += `local r={}\n`;
-  decoder += `for i=1,#t do\n`;
-  decoder += `r[i]=string.char(bit32.bxor(t[i],string.byte(k,(i-1)%#k+1)))\n`;
-  decoder += `end\n`;
-  decoder += `return table.concat(r)\n`;
-  decoder += `end\n`;
+  let decoderCode = "local " + decName + "=function(t,k)\n";
+  decoderCode += "local r={}\n";
+  decoderCode += "for i=1,#t do\n";
+  decoderCode += "local b=string.byte(k,(i-1)%#k+1)\n";
+  decoderCode += "r[i]=string.char(bit32.bxor(t[i],b))\n";
+  decoderCode += "end\n";
+  decoderCode += "return table.concat(r)\n";
+  decoderCode += "end\n";
 
-  // Encrypt and replace strings
   for (let i = 0; i < strings.length; i++) {
-    const str = strings[i].slice(1, -1)
+    const strContent = strings[i].slice(1, -1)
       .replace(/\\/g, "\\\\")
       .replace(/"/g, '\\"')
       .replace(/\n/g, "\\n")
-      .replace(/\t/g, "\\t")
-      .replace(/\r/g, "\\r");
+      .replace(/\t/g, "\\t");
 
     const encrypted = [];
-    for (let j = 0; j < str.length; j++) {
-      encrypted.push(str.charCodeAt(j) ^ keyBytes[j % keyBytes.length]);
+    for (let j = 0; j < strContent.length; j++) {
+      encrypted.push(strContent.charCodeAt(j) ^ keyBytes[j % keyBytes.length]);
     }
 
-    const table = `{${encrypted.join(",")}}`;
-    code = code.replace(`__STR_${i}__`, `${decoderName}:dec(${table},"${key}")`);
+    // Construir tabla de bytes segura
+    const bytesStr = "{" + encrypted.join(",") + "}";
+    const decCall = decName + "(" + bytesStr + ",\"" + key + "\")";
+    code = code.replace("___STR_" + i + "___", decCall);
   }
 
-  return { code, decoder };
+  return { code, decoder: decoderCode };
 }
 
-function minify(code) {
+function minifyImproved(code) {
   return code
     .split("\n")
-    .map(l => l.replace(/[ \t]+$/g, ""))
-    .filter((l, i, a) => !(l.trim() === "" && i > 0 && a[i-1].trim() === ""))
+    .map(line => line.replace(/[ \t]+$/g, ""))
+    .filter((line, i, arr) => {
+      if (line.trim() === "" && i > 0 && arr[i - 1].trim() === "") return false;
+      return true;
+    })
     .join("\n")
     .trim();
 }
 
-function obfuscateExploit(source, level) {
-  console.log(`[Process] Input: ${source.length} bytes, Level: ${level}`);
-  
+function obfuscateLuaImproved(source, level) {
   let code = source.trim();
 
-  // Level 1: Basic
+  // Strip comments (pero preservar estructura)
+  code = stripCommentsImproved(code);
+
+  // Nivel 1+: Renombrar variables
   if (level >= 1) {
-    code = renameVariables(code);
+    code = renameLocalsImproved(code);
   }
 
-  // Level 2: Aggressive
+  // Nivel 2: Ofuscación adicional
   if (level >= 2) {
-    code = obfuscateNumbers(code);
-    code = injectNoise(code);
+    code = obfuscateNumbersImproved(code);
+    code = injectJunkImproved(code);
   }
 
-  // Encrypt strings for level 2+
-  let decoder = "";
+  // Proteger strings
+  const prot = protectStringsImproved(code, level);
+  code = prot.code;
+  const decoder = prot.decoder || "";
+
+  // Minificar
+  code = minifyImproved(code);
+
+  // Construir resultado
+  let result = "-- Ofuscado con IKGONAVI MEJORADO\n";
+
   if (level >= 2) {
-    const enc = encryptStrings(code);
-    code = enc.code;
-    decoder = enc.decoder;
-  } else {
-    code = stripComments(code);
-  }
-
-  code = minify(code);
-
-  let result = "-- Ofuscado para Exploit\n";
-  if (decoder) {
     result += decoder + "\n";
   }
-  result += code;
 
-  console.log(`[Process] Output: ${result.length} bytes`);
+  result += code;
   return result;
 }
 
-app.post("/api/obfuscate", (req, res) => {
+app.post("/api/obfuscate", function(req, res) {
   try {
-    const { code, level } = req.body;
+    const code = req.body && req.body.code;
+    const level = req.body && req.body.level;
 
-    if (!code || typeof code !== "string") {
-      return res.status(400).json({ error: "No code provided" });
+    if (typeof code !== "string" || !code.trim()) {
+      return res.status(400).json({ error: "No se recibió ningún script Lua." });
     }
 
-    if (code.length > 5000000) { // 5MB
-      return res.status(400).json({ error: "Script too large (max 5MB)" });
+    // Aumentar límite para scripts grandes
+    if (code.length > 500000) {
+      return res.status(400).json({ error: "Script demasiado grande (máx 500KB)." });
     }
 
     const selectedLevel = Math.max(1, Math.min(2, Number(level) || 1));
-    const result = obfuscateExploit(code, selectedLevel);
+    
+    console.log(`[Obfuscate] Size: ${code.length} bytes, Level: ${selectedLevel}`);
+    
+    const result = obfuscateLuaImproved(code, selectedLevel);
 
     res.json({
       success: true,
       code: result,
-      inputSize: code.length,
+      originalSize: code.length,
       outputSize: result.length,
-      level: selectedLevel
+      level: selectedLevel,
+      compressionRatio: ((1 - result.length / code.length) * 100).toFixed(2) + "%"
     });
 
   } catch (err) {
-    console.error("[ERROR]", err);
-    res.status(500).json({ error: `Error: ${err.message}` });
+    console.error("[Error]", err);
+    res.status(500).json({ error: "Error procesando: " + (err.message || "unknown") });
   }
 });
 
-app.get("/api/health", (req, res) => {
-  res.json({ ok: true, version: "exploit-obfuscator-v1", maxSize: "5MB" });
+app.get("/api/health", function(req, res) {
+  res.json({ ok: true, version: "mejorado-bigscripts", maxSize: "500KB" });
 });
 
-app.get("/", (req, res) => {
+app.get("/", function(req, res) {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
@@ -282,9 +320,8 @@ app.use(express.static(path.join(__dirname, "public")));
 module.exports = app;
 
 if (require.main === module) {
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`\n[OBFUSCATOR] Running on port ${PORT}`);
-    console.log(`[SUPPORT] Scripts up to 5MB`);
-    console.log(`[MODE] Exploit Obfuscator v1\n`);
+  app.listen(PORT, "0.0.0.0", function() {
+    console.log("IKGONAVI MEJORADO running on port " + PORT);
+    console.log("Soporta scripts hasta 500KB");
   });
 }
