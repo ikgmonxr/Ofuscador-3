@@ -3,564 +3,283 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IKGONAVI — Lua Obfuscator (Mejorado)</title>
+<title>Exploit Obfuscator</title>
 <style>
-* {
-    box-sizing: border-box;
-}
-html {
-    scroll-behavior: smooth;
-}
+* { box-sizing: border-box; }
 body {
-    margin: 0;
-    min-height: 100vh;
-    background:
-        radial-gradient(
-            circle at 50% -20%,
-            rgba(39, 137, 255, .30),
-            transparent 40%
-        ),
-        #040811;
-    color: #f5f8ff;
-    font-family:
-        Inter,
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        Arial,
-        sans-serif;
+  margin: 0;
+  background: #0a0e27;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  padding: 20px;
 }
-body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background-image:
-        linear-gradient(
-            rgba(255,255,255,.018) 1px,
-            transparent 1px
-        ),
-        linear-gradient(
-            90deg,
-            rgba(255,255,255,.018) 1px,
-            transparent 1px
-        );
-    background-size: 45px 45px;
-    mask-image:
-        linear-gradient(
-            to bottom,
-            black,
-            transparent
-        );
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
 }
-.navbar {
-    width: min(1180px, 92%);
-    height: 76px;
-    margin: auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+h1 {
+  color: #00d4ff;
+  text-align: center;
+  margin: 0 0 30px 0;
 }
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-.logo-box {
-    width: 40px;
-    height: 40px;
-    display: grid;
-    place-items: center;
-    border-radius: 11px;
-    background:
-        linear-gradient(
-            135deg,
-            #4bbcff,
-            #2468ff
-        );
-    box-shadow:
-        0 0 30px
-        rgba(42, 139, 255, .35);
-    font-weight: 900;
-    font-size: 20px;
-}
-.logo-text strong {
-    display: block;
-    font-size: 14px;
-    letter-spacing: 2px;
-}
-.logo-text small {
-    display: block;
-    margin-top: 2px;
-    color: #5f718b;
-    font-size: 8px;
-    letter-spacing: 2px;
-}
-.status-badge {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #3be69b;
-    font-size: 10px;
-    letter-spacing: 1px;
-    padding: 6px 12px;
-    border: 1px solid rgba(59,230,155,.3);
-    border-radius: 20px;
-}
-.status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #3be69b;
-    box-shadow: 0 0 12px rgba(59,230,155,.8);
-}
-.hero {
-    width: min(900px, 92%);
-    margin: auto;
-    padding: 90px 0 65px;
-    text-align: center;
-}
-.tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 13px;
-    border: 1px solid rgba(69,156,255,.25);
-    border-radius: 100px;
-    background: rgba(33,114,218,.09);
-    color: #7fc1ff;
-    font-size: 9px;
-    letter-spacing: 1.7px;
-}
-.hero h1 {
-    margin: 24px 0 18px;
-    font-size: clamp(45px, 7vw, 78px);
-    line-height: .96;
-    letter-spacing: -4px;
-}
-.gradient {
-    background: linear-gradient(90deg, #5ac2ff, #3579ff);
-    color: transparent;
-    background-clip: text;
-    -webkit-background-clip: text;
-}
-.hero p {
-    max-width: 580px;
-    margin: auto;
-    color: #71829c;
-    line-height: 1.7;
-    font-size: 14px;
-}
-.workspace {
-    width: min(1180px, 92%);
-    margin: auto;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr);
-    align-items: center;
-    gap: 20px;
-}
-.editor {
-    overflow: hidden;
-    border: 1px solid rgba(101,153,211,.16);
-    border-radius: 16px;
-    background: rgba(8,14,26,.90);
-    box-shadow: 0 30px 80px rgba(0,0,0,.30);
-    transition: .2s;
-}
-.editor:focus-within {
-    border-color: rgba(63,156,255,.45);
-    box-shadow: 0 0 0 1px rgba(63,156,255,.08), 0 30px 80px rgba(0,0,0,.30);
-}
-.editor-top {
-    height: 52px;
-    padding: 0 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid rgba(255,255,255,.05);
-}
-.file {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    color: #9baac0;
-    font-size: 11px;
-}
-.file-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #4ab2ff;
-    box-shadow: 0 0 10px rgba(74,178,255,.5);
-}
-.file-dot.green {
-    background: #38e69a;
-    box-shadow: 0 0 10px rgba(56,230,154,.5);
-}
-.editor textarea {
-    display: block;
-    width: 100%;
-    height: 320px;
-    padding: 20px;
-    border: 0;
-    outline: 0;
-    resize: none;
-    background: #060b14;
-    color: #cfe3ff;
-    font-family: Consolas, "Courier New", monospace;
-    font-size: 13px;
-    line-height: 1.7;
-}
-.editor textarea::placeholder {
-    color: #34445b;
-}
-.editor-bottom {
-    height: 46px;
-    padding: 0 15px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: #52647d;
-    font-size: 9px;
+.controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  justify-content: center;
 }
 select {
-    padding: 7px 10px;
-    border: 1px solid #243a58;
-    border-radius: 7px;
-    outline: none;
-    background: #0a1322;
-    color: #9bb1cd;
-    font-size: 9px;
-    cursor: pointer;
+  padding: 8px 12px;
+  background: #1a1f3a;
+  color: #00d4ff;
+  border: 1px solid #00d4ff;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  cursor: pointer;
 }
-.action {
-    text-align: center;
+button {
+  padding: 8px 20px;
+  background: #00d4ff;
+  color: #0a0e27;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
 }
-#obfuscate {
-    width: 100%;
-    padding: 14px 8px;
-    border: 0;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #42b5ff, #276bff);
-    color: white;
-    font-weight: 800;
-    font-size: 10px;
-    letter-spacing: .8px;
-    cursor: pointer;
-    box-shadow: 0 15px 35px rgba(35,116,255,.22);
-    transition: .2s;
+button:hover {
+  background: #00e5ff;
 }
-#obfuscate:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 18px 45px rgba(35,116,255,.35);
+button:disabled {
+  background: #666;
+  cursor: wait;
 }
-#obfuscate:disabled {
-    opacity: .55;
-    cursor: wait;
-    transform: none;
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
 }
-.action p {
-    margin: 10px 0 0;
-    color: #43536a;
-    font-size: 8px;
-    line-height: 1.4;
+.panel {
+  border: 1px solid #00d4ff;
+  border-radius: 4px;
+  padding: 15px;
+  background: #0f1426;
 }
-.small-button {
-    border: 0;
-    background: transparent;
-    color: #63738c;
-    font-size: 9px;
-    cursor: pointer;
+.panel h2 {
+  margin: 0 0 10px 0;
+  color: #00d4ff;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
 }
-.small-button:hover {
-    color: white;
+textarea {
+  width: 100%;
+  height: 400px;
+  background: #0a0e27;
+  color: #00ff00;
+  border: 1px solid #00d4ff;
+  border-radius: 4px;
+  padding: 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  resize: vertical;
 }
-.info-box {
-    width: min(1000px, 92%);
-    margin: 30px auto;
-    padding: 15px 20px;
-    border-left: 3px solid #3be69b;
-    background: rgba(59,230,155,.08);
-    border-radius: 8px;
-    color: #7ee6b5;
-    font-size: 12px;
-    line-height: 1.5;
+textarea::placeholder {
+  color: #555;
 }
-.warning-box {
-    width: min(1000px, 92%);
-    margin: 30px auto;
-    padding: 15px 20px;
-    border-left: 3px solid #ffa500;
-    background: rgba(255,165,0,.08);
-    border-radius: 8px;
-    color: #ffb74d;
-    font-size: 12px;
-    line-height: 1.5;
+.info {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #888;
 }
-.stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
-    width: min(1000px, 92%);
-    margin: 30px auto;
+.copy-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
 }
-.stat-card {
-    padding: 15px;
-    border: 1px solid rgba(255,255,255,.08);
-    border-radius: 10px;
-    background: rgba(9,15,27,.55);
-    text-align: center;
+.status {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 12px;
+  color: #888;
 }
-.stat-value {
-    font-size: 24px;
-    font-weight: 800;
-    color: #42b5ff;
-    margin-bottom: 5px;
+.status.success {
+  color: #00ff00;
 }
-.stat-label {
-    font-size: 11px;
-    color: #64738a;
-    letter-spacing: 1px;
+.status.error {
+  color: #ff4444;
 }
-footer {
-    padding: 55px 0 30px;
-    text-align: center;
-    color: #35445b;
-    font-size: 9px;
+.quick-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+  flex-wrap: wrap;
 }
-@media (max-width: 850px) {
-    .hero {
-        padding-top: 60px;
-    }
-    .hero h1 {
-        letter-spacing: -2px;
-    }
-    .workspace {
-        grid-template-columns: 1fr;
-    }
-    .action {
-        width: 220px;
-        margin: 0 auto;
-    }
-    .stats {
-        grid-template-columns: repeat(2, 1fr);
-    }
+.quick-buttons button {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.warning {
+  background: #3a2a1a;
+  border-left: 3px solid #ffaa00;
+  padding: 10px 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+  color: #ffaa00;
+  font-size: 12px;
+  line-height: 1.5;
+}
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 </head>
 <body>
-<header class="navbar">
-    <div class="logo">
-        <div class="logo-box">I</div>
-        <div class="logo-text">
-            <strong>IKGONAVI</strong>
-            <small>MEJORADO</small>
-        </div>
-    </div>
-    <div class="status-badge">
-        <span class="status-dot"></span>
-        BIGSCRIPTS
-    </div>
-</header>
 
-<section class="hero">
-    <div class="tag">✦ LUA / ROBLOX OBFUSCATOR</div>
-    <h1>
-        Protege tu código.<br>
-        <span class="gradient">Ahora con scripts grandes.</span>
-    </h1>
-    <p>
-        Obfuscador potente compatible con Roblox.
-        Soporta scripts de hasta 500KB sin problemas.
-    </p>
-</section>
+<div class="container">
+  <h1>⚡ EXPLOIT OBFUSCATOR</h1>
+  
+  <div class="warning">
+    ⚠️ Obfuscador para exploit scripts de Roblox. Soporta scripts hasta 5MB. NO usa load/loadstring.
+  </div>
 
-<div class="info-box">
-    ✓ VERSIÓN MEJORADA: Optimizada para scripts grandes (10K+ líneas)
+  <div class="controls">
+    <select id="level">
+      <option value="1">LEVEL 1 - Basic (Variables)</option>
+      <option value="2" selected>LEVEL 2 - Aggressive (Variables + Strings + Noise)</option>
+    </select>
+    <button onclick="obfuscate()">OBFUSCATE</button>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Input Script</h2>
+      <textarea id="input" placeholder="Pega tu exploit script aquí..."></textarea>
+      <div class="info">
+        <span id="inputSize">0 bytes</span>
+        <button class="quick-buttons" style="width: auto; margin-top: 0;" onclick="document.getElementById('input').value=''">Clear</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Obfuscated Output</h2>
+      <textarea id="output" readonly placeholder="El script ofuscado aparecerá aquí..."></textarea>
+      <div class="info">
+        <span id="outputSize">0 bytes</span>
+      </div>
+      <button class="copy-btn" onclick="copyOutput()">📋 COPY OUTPUT</button>
+    </div>
+  </div>
+
+  <div class="status" id="status">Ready</div>
+
+  <div class="quick-buttons">
+    <button onclick="loadExample()">📄 Load Example</button>
+    <button onclick="clearAll()">🗑️ Clear All</button>
+  </div>
 </div>
-
-<section class="workspace">
-    <!-- INPUT -->
-    <div class="editor">
-        <div class="editor-top">
-            <div class="file">
-                <span class="file-dot"></span>
-                script.lua
-            </div>
-            <button class="small-button" id="clear">CLEAR</button>
-        </div>
-        <textarea
-            id="input"
-            spellcheck="false"
-            placeholder="-- Pega tu script Lua / Roblox aquí
--- Funciona con scripts de cualquier tamaño (hasta 500KB)"
-        ></textarea>
-        <div class="editor-bottom">
-            <span id="inputInfo">0 caracteres</span>
-            <select id="level">
-                <option value="1">BASIC</option>
-                <option value="2" selected>ADVANCED</option>
-            </select>
-        </div>
-    </div>
-
-    <!-- ACTION -->
-    <div class="action">
-        <button id="obfuscate">✦ &nbsp; OBFUSCATE</button>
-        <p id="status">Listo para procesar</p>
-    </div>
-
-    <!-- OUTPUT -->
-    <div class="editor">
-        <div class="editor-top">
-            <div class="file">
-                <span class="file-dot green"></span>
-                protected.lua
-            </div>
-            <button class="small-button" id="copy">COPY</button>
-        </div>
-        <textarea
-            id="output"
-            readonly
-            spellcheck="false"
-            placeholder="Tu código protegido aparecerá aquí..."
-        ></textarea>
-        <div class="editor-bottom">
-            <span id="outputInfo">0 caracteres</span>
-            <span id="result">LISTO</span>
-        </div>
-    </div>
-</section>
-
-<section class="stats" id="statsContainer" style="display: none;">
-    <div class="stat-card">
-        <div class="stat-value" id="compressionStat">0%</div>
-        <div class="stat-label">COMPRESIÓN</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value" id="timeStat">0ms</div>
-        <div class="stat-label">TIEMPO</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value" id="levelStat">-</div>
-        <div class="stat-label">NIVEL</div>
-    </div>
-</section>
-
-<div class="warning-box" id="warningBox" style="display: none;">
-    ⚠️ <span id="warningText"></span>
-</div>
-
-<footer>
-    © 2026 IKGONAVI • Lua Obfuscator Mejorado • Máx 500KB
-</footer>
 
 <script>
-const input = document.getElementById("input");
-const output = document.getElementById("output");
-const level = document.getElementById("level");
-const button = document.getElementById("obfuscate");
-const clear = document.getElementById("clear");
-const copy = document.getElementById("copy");
-const inputInfo = document.getElementById("inputInfo");
-const outputInfo = document.getElementById("outputInfo");
-const status = document.getElementById("status");
-const result = document.getElementById("result");
-const statsContainer = document.getElementById("statsContainer");
-const warningBox = document.getElementById("warningBox");
+const input = document.getElementById('input');
+const output = document.getElementById('output');
+const inputSize = document.getElementById('inputSize');
+const outputSize = document.getElementById('outputSize');
+const status = document.getElementById('status');
 
-function counters() {
-    const inputLen = input.value.length;
-    inputInfo.textContent = `${inputLen.toLocaleString()} caracteres`;
-    outputInfo.textContent = `${output.value.length.toLocaleString()} caracteres`;
-    
-    if (inputLen > 100000) {
-        warningBox.style.display = "block";
-        document.getElementById("warningText").textContent = "Script muy grande (" + (inputLen / 1024).toFixed(0) + "KB). Procesamiento puede tardar más.";
+input.addEventListener('input', () => {
+  inputSize.textContent = (input.value.length / 1024).toFixed(2) + ' KB';
+});
+
+function obfuscate() {
+  if (!input.value.trim()) {
+    status.textContent = 'Error: Paste a script first';
+    status.className = 'status error';
+    return;
+  }
+
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+
+  const level = document.getElementById('level').value;
+
+  fetch('/api/obfuscate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      code: input.value,
+      level: parseInt(level)
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      output.value = data.code;
+      outputSize.textContent = (data.outputSize / 1024).toFixed(2) + ' KB';
+      status.textContent = `✓ Obfuscated (${data.inputSize} → ${data.outputSize} bytes)`;
+      status.className = 'status success';
     } else {
-        warningBox.style.display = "none";
+      status.textContent = `Error: ${data.error}`;
+      status.className = 'status error';
     }
+  })
+  .catch(e => {
+    status.textContent = `Error: ${e.message}`;
+    status.className = 'status error';
+  })
+  .finally(() => {
+    btn.disabled = false;
+    btn.textContent = 'OBFUSCATE';
+  });
 }
 
-input.addEventListener("input", counters);
+function copyOutput() {
+  if (!output.value) {
+    status.textContent = 'Nothing to copy';
+    return;
+  }
+  navigator.clipboard.writeText(output.value).then(() => {
+    status.textContent = '✓ Copied to clipboard';
+    status.className = 'status success';
+    setTimeout(() => {
+      status.textContent = 'Ready';
+      status.className = 'status';
+    }, 2000);
+  });
+}
 
-clear.addEventListener("click", () => {
-    input.value = "";
-    output.value = "";
-    result.textContent = "LISTO";
-    status.textContent = "Listo para procesar";
-    statsContainer.style.display = "none";
-    warningBox.style.display = "none";
-    counters();
-});
+function clearAll() {
+  input.value = '';
+  output.value = '';
+  inputSize.textContent = '0 bytes';
+  outputSize.textContent = '0 bytes';
+  status.textContent = 'Ready';
+  status.className = 'status';
+}
 
-copy.addEventListener("click", async () => {
-    if (!output.value) return;
-    try {
-        await navigator.clipboard.writeText(output.value);
-        copy.textContent = "COPIED ✓";
-        setTimeout(() => { copy.textContent = "COPY"; }, 1300);
-    } catch {
-        output.select();
-        document.execCommand("copy");
-    }
-});
+function loadExample() {
+  input.value = `-- Example Exploit Script
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
-button.addEventListener("click", async () => {
-    if (!input.value.trim()) {
-        status.textContent = "Pega un script Lua primero";
-        input.focus();
-        return;
-    }
-    
-    const startTime = performance.now();
-    button.disabled = true;
-    button.textContent = "◌ PROCESSING...";
-    status.textContent = "Procesando script grande...";
-    result.textContent = "PROCESANDO";
-    statsContainer.style.display = "none";
-    
-    try {
-        const response = await fetch("/api/obfuscate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                code: input.value,
-                level: Number(level.value)
-            })
-        });
-        
-        const endTime = performance.now();
-        const processingTime = (endTime - startTime).toFixed(0);
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.error || "Obfuscación fallida");
-        }
-        
-        output.value = data.code;
-        counters();
-        result.textContent = "PROTEGIDO";
-        status.textContent = "✓ Obfuscación completada";
-        
-        // Mostrar estadísticas
-        statsContainer.style.display = "grid";
-        document.getElementById("compressionStat").textContent = data.compressionRatio || "0%";
-        document.getElementById("timeStat").textContent = processingTime + "ms";
-        document.getElementById("levelStat").textContent = data.level === 1 ? "BASIC" : "ADVANCED";
-        
-    } catch (error) {
-        result.textContent = "ERROR";
-        status.textContent = error.message;
-        statsContainer.style.display = "none";
-    } finally {
-        button.disabled = false;
-        button.textContent = "✦ OBFUSCATE";
-    }
-});
+function main()
+  print("Script running")
+  local character = LocalPlayer.Character
+  if character then
+    print("Character found:", character.Name)
+  end
+end
 
-counters();
+main()`;
+  inputSize.textContent = (input.value.length / 1024).toFixed(2) + ' KB';
+}
 </script>
+
 </body>
 </html>
