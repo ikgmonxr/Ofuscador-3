@@ -95,7 +95,7 @@ function decodeLuaShortString(raw) {
   return result;
 }
 
-function encodeString(raw, level) {
+function encodeString(raw, level, decoderName) {
   const decoded = decodeLuaShortString(raw);
   if (decoded === null || decoded.length === 0) return raw;
   const bytes = [...Buffer.from(decoded, "utf8")];
@@ -104,15 +104,25 @@ function encodeString(raw, level) {
   const encoded = bytes.map(value => salt ? String(value ^ salt) : String(value));
   const payload = encoded.join(",");
   if (!salt) return `string.char(${payload})`;
-  return `(function(t)local r={}for i=1,#t do r[i]=string.char((t[i]~${salt}))end return table.concat(r)end)({${payload}})`;
+  return `${decoderName}({${payload}})`;
 }
 
-function render(tokens, { encryptStrings, level }) {
+function encodeInteger(raw, index) {
+  if (!/^\d[\d_]*$/.test(raw)) return raw;
+  const number = Number(raw.replaceAll("_", ""));
+  if (!Number.isSafeInteger(number) || number < 0 || number > 2147483647) return raw;
+  const key = ((index * 1103515245 + 12345) >>> 0) & 0x7fffffff;
+  return `(((${number}~${key})~${key}))`;
+}
+
+function render(tokens, { encryptStrings, level, decoderName }) {
   let output = "";
   let previous = "";
-  for (const token of tokens) {
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
     let current = token.value;
-    if (encryptStrings && token.type === "string") current = encodeString(current, level);
+    if (encryptStrings && token.type === "string") current = encodeString(current, level, decoderName);
+    if (level === 3 && token.type === "number") current = encodeInteger(current, index);
     const needsSpace = (isWordEnd(previous) && isWordStart(current)) ||
       (previous.endsWith("-") && current.startsWith("-"));
     if (needsSpace) output += " ";
@@ -125,11 +135,18 @@ function render(tokens, { encryptStrings, level }) {
 function obfuscate(code, options) {
   const level = [1, 2, 3].includes(Number(options.level)) ? Number(options.level) : 2;
   const tokens = tokenizeLua(code);
-  const body = render(tokens, { encryptStrings: Boolean(options.encryptStrings), level });
+  const usedNames = new Set(tokens.filter(token => token.type === "identifier").map(token => token.value));
+  const seed = crypto.createHash("sha256").update(code).digest("hex");
+  let suffixLength = 7;
+  let decoderName = `__q${seed.slice(0, suffixLength)}`;
+  while (usedNames.has(decoderName)) decoderName = `__q${seed.slice(0, ++suffixLength)}`;
+  const useDecoder = Boolean(options.encryptStrings) && level === 3;
+  const body = render(tokens, { encryptStrings: Boolean(options.encryptStrings), level, decoderName });
   const hash = crypto.createHash("sha256").update(body).digest("hex").slice(0, 16);
   const marker = options.integrityMarker ? " | integrity marker" : "";
   const header = `-- QyrexObf Local | level ${level} | build ${hash}${marker}\n`;
-  return { code: header + body, level, hash };
+  const decoder = `local ${decoderName}=function(t)local r={}for i=1,#t do r[i]=string.char((t[i]~37))end return table.concat(r)end;`;
+  return { code: header + (useDecoder ? decoder : "") + body, level, hash };
 }
 
 function sendJson(res, status, body) {
