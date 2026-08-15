@@ -1,11 +1,29 @@
 {
-  "name": "qyrex-obf",
-  "version": "1.0.0",
-  "main": "server.js",
+  "name": "ikgonavi-obfuscator",
+  "version": "3.0.0",
+  "description": "Ultra Anti-Tamper Lua Obfuscator for Roblox - Keyforge + Luarph + Aqua + Anti-Sandbox",
+  "main": "server-final-antitamper.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server-final-antitamper.js",
+    "dev": "node server-final-antitamper.js"
+  },
+  "keywords": [
+    "roblox",
+    "lua",
+    "obfuscator",
+    "protection",
+    "anti-tamper",
+    "keyforge",
+    "luarph",
+    "aqua",
+    "sandbox"
+  ],
+  "author": "IKGONAVI Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=14.0.0"
   }
 }
