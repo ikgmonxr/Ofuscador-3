@@ -1,36 +1,449 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>QyrexObf · Local Lua Protection</title>
-  <style>
-    :root{--bg:#060914;--panel:#0c1224;--line:#263454;--text:#eef3ff;--muted:#91a0c2;--cyan:#4eeaff;--violet:#9a75ff;--ok:#79f2b0}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 10% 0%,#182957 0,transparent 32rem),radial-gradient(circle at 90% 100%,#2b1759 0,transparent 35rem),var(--bg);color:var(--text);font:14px Inter,ui-sans-serif,system-ui,sans-serif}.shell{max-width:1280px;margin:auto;padding:28px 22px 60px}.nav{display:flex;justify-content:space-between;align-items:center}.brand{font-weight:800;font-size:18px;letter-spacing:.4px}.brand i{font-style:normal;color:var(--cyan)}.badge,.chip{border:1px solid #31557b;background:#10233b;color:#a9eefe;border-radius:999px;padding:7px 11px;font-size:11px;font-weight:700;letter-spacing:.6px}.hero{padding:70px 0 36px;max-width:760px}.eyebrow{color:var(--cyan);font-weight:800;font-size:11px;letter-spacing:1.5px}.hero h1{font-size:clamp(38px,6vw,70px);letter-spacing:-3px;line-height:1;margin:14px 0}.hero h1 span{background:linear-gradient(90deg,var(--cyan),#bed5ff,var(--violet));background-clip:text;color:transparent}.hero p{font-size:17px;color:var(--muted);line-height:1.65;margin:0}.controls,.editors{display:grid;gap:14px}.controls{grid-template-columns:1fr auto;align-items:center;background:#0a1021cc;border:1px solid var(--line);padding:14px 16px;border-radius:14px}.choices{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.choices label,.choices select{color:#c8d3ef}.choices label{display:flex;gap:6px;align-items:center}.choices select{background:#141e35;border:1px solid var(--line);border-radius:7px;padding:6px;color:var(--text)}.editors{grid-template-columns:1fr 1fr;margin-top:14px}.editor{min-width:0;background:linear-gradient(145deg,#101a30,#0a1020);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 24px 60px #0004}.editor-head{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;color:var(--muted);font:12px ui-monospace,SFMono-Regular,Consolas}.dot{display:inline-block;width:8px;height:8px;background:var(--cyan);border-radius:50%;margin-right:8px}.dot.green{background:var(--ok)}textarea{width:100%;height:370px;border:0;outline:0;resize:vertical;padding:18px;background:transparent;color:#dfe9ff;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas}textarea::placeholder{color:#60709a}button{border:0;border-radius:9px;padding:9px 12px;color:var(--text);background:#1a2946;cursor:pointer;font-weight:700}button:hover{filter:brightness(1.15)}.primary{padding:12px 18px;background:linear-gradient(115deg,#1d91b6,#7657d8);box-shadow:0 8px 24px #4378b344}.subtle{font-size:11px}.action{display:flex;justify-content:space-between;align-items:center;margin:18px 0}.status{color:var(--muted);font-size:12px}.stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px}.stat{padding:14px 18px;min-width:160px;border:1px solid var(--line);border-radius:12px;background:#0b1326}.stat b{font-size:19px;display:block;color:var(--cyan)}.stat span{font-size:10px;color:var(--muted);letter-spacing:.8px}.notice{margin-top:24px;padding:14px 16px;border-left:3px solid var(--violet);background:#111331aa;color:#b5c0de;line-height:1.5}.hidden{display:none}@media(max-width:760px){.shell{padding:20px 14px}.hero{padding-top:48px}.editors{grid-template-columns:1fr}.controls{grid-template-columns:1fr}.action{align-items:flex-start;gap:12px;flex-direction:column}textarea{height:290px}}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IKGONAVI Obfuscator v3.0 - Ultra Anti-Tamper</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 20px;
+  background: linear-gradient(135deg, #0a0e27 0%, #1a1a2e 50%, #16213e 100%);
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  min-height: 100vh;
+}
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.header {
+  text-align: center;
+  margin-bottom: 40px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #00d4ff;
+}
+h1 {
+  margin: 0;
+  color: #00d4ff;
+  font-size: 28px;
+  text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+}
+.version {
+  color: #888;
+  font-size: 12px;
+  margin-top: 5px;
+}
+.toolbar {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 15px;
+  margin-bottom: 25px;
+  padding: 20px;
+  background: rgba(20, 30, 50, 0.8);
+  border: 1px solid #00d4ff;
+  border-radius: 8px;
+}
+.toolbar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toolbar-label {
+  font-size: 11px;
+  color: #00d4ff;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+select, button, input[type="checkbox"] {
+  padding: 8px 12px;
+  background: #1a2a4a;
+  color: #e0e0e0;
+  border: 1px solid #00d4ff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  transition: all 0.3s ease;
+}
+select:hover, button:hover {
+  background: #2a3a5a;
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.checkbox-group {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #00d4ff;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #00d4ff;
+  background: rgba(15, 25, 45, 0.9);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.1);
+}
+.panel-title {
+  padding: 12px 15px;
+  background: #1a2a4a;
+  border-bottom: 1px solid #00d4ff;
+  font-weight: bold;
+  color: #00d4ff;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+textarea {
+  flex: 1;
+  padding: 15px;
+  background: #0a0e27;
+  color: #0f0;
+  border: none;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  resize: vertical;
+  min-height: 450px;
+  line-height: 1.5;
+}
+textarea::placeholder {
+  color: #555;
+}
+.info {
+  padding: 10px 15px;
+  background: #1a2a4a;
+  border-top: 1px solid #00d4ff;
+  font-size: 11px;
+  color: #888;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.button-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 25px 0;
+  flex-wrap: wrap;
+}
+button {
+  padding: 12px 24px;
+  font-weight: bold;
+  font-size: 13px;
+}
+.obfuscate-btn {
+  background: linear-gradient(135deg, #00d4ff, #0099cc);
+  border: none;
+  padding: 14px 32px;
+  font-size: 14px;
+}
+.obfuscate-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #00e6ff, #00aadd);
+}
+.status {
+  text-align: center;
+  margin: 15px 0;
+  font-size: 13px;
+  color: #888;
+  min-height: 20px;
+  padding: 10px;
+  background: rgba(0, 212, 255, 0.05);
+  border-radius: 4px;
+}
+.status.success {
+  color: #0f0;
+  background: rgba(0, 255, 0, 0.1);
+}
+.status.error {
+  color: #ff4444;
+  background: rgba(255, 0, 0, 0.1);
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-top: 20px;
+}
+.stat-box {
+  padding: 15px;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid #00d4ff;
+  border-radius: 4px;
+  text-align: center;
+}
+.stat-value {
+  font-size: 20px;
+  color: #00d4ff;
+  font-weight: bold;
+  margin: 8px 0;
+}
+.stat-label {
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.features {
+  margin-top: 30px;
+  padding: 20px;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid #00d4ff;
+  border-radius: 8px;
+}
+.features h3 {
+  color: #00d4ff;
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+.features ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.features li {
+  margin: 6px 0;
+  font-size: 12px;
+  color: #aaa;
+}
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
 </head>
 <body>
-  <main class="shell">
-    <nav class="nav"><div class="brand">Qyrex<i>Obf</i></div><div class="badge">LOCAL ENGINE · NO UPLOADS</div></nav>
-    <section class="hero"><div class="eyebrow">ROBLOX STUDIO · LUAU SOURCE TRANSFORMER</div><h1>Protección práctica.<br><span>Para tu experiencia.</span></h1><p>Minifica ModuleScripts y LocalScripts propios, y transforma cadenas cortas localmente. Conserva el original: la ofuscación aumenta el coste de lectura, pero no sustituye la lógica sensible en el servidor ni las revisiones de seguridad.</p></section>
-    <section class="controls">
-      <div class="choices"><span class="chip">CAPAS</span><label><input id="strings" type="checkbox" checked> Cifrar cadenas</label><label><input id="integrity" type="checkbox"> Marca de integridad</label><label>Nivel <select id="level"><option value="1">Básico</option><option value="2">Avanzado</option><option value="3" selected>Ultra</option></select></label></div>
-      <button id="load" class="subtle">CARGAR .LUA</button><input id="file" type="file" accept=".lua,.luau,.txt" class="hidden">
-    </section>
-    <section class="editors">
-      <article class="editor"><div class="editor-head"><span><i class="dot"></i>ModuleScript.luau</span><button id="clear" class="subtle">LIMPIAR</button></div><textarea id="input" spellcheck="false" placeholder="-- Pega aquí un ModuleScript o LocalScript de tu experiencia Roblox"></textarea></article>
-      <article class="editor"><div class="editor-head"><span><i class="dot green"></i>protected.lua</span><span><button id="copy" class="subtle">COPIAR</button> <button id="download" class="subtle">DESCARGAR</button></span></div><textarea id="output" readonly spellcheck="false" placeholder="El resultado aparecerá aquí."></textarea></article>
-    </section>
-    <div class="action"><button id="obfuscate" class="primary">✦ OFUSCAR CÓDIGO</button><span id="status" class="status">Listo para procesar hasta 500 KB.</span></div>
-    <section class="stats"><div class="stat"><b id="ratio">—</b><span>TAMAÑO RESULTANTE</span></div><div class="stat"><b id="time">—</b><span>TIEMPO DE MOTOR</span></div><div class="stat"><b id="build">—</b><span>BUILD ID</span></div></section>
-    <aside class="notice">Compatible con Luau de Roblox Studio. El proyecto rechaza APIs de executor y carga dinámica. Mantén economía, validaciones, inventario y permisos en scripts de servidor: el cliente nunca debe ser la autoridad.</aside>
-  </main>
-  <script>
-    const $=id=>document.getElementById(id), input=$("input"), output=$("output"), status=$("status");
-    $("load").onclick=()=>$("file").click(); $("file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>input.value=r.result;r.readAsText(f)};
-    $("clear").onclick=()=>{input.value="";output.value="";status.textContent="Listo para procesar hasta 500 KB."};
-    $("copy").onclick=async()=>{if(output.value)await navigator.clipboard.writeText(output.value)};
-    $("download").onclick=()=>{if(!output.value)return;const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([output.value],{type:"text/plain"}));a.download="protected_qyrex.lua";a.click();URL.revokeObjectURL(a.href)};
-    $("obfuscate").onclick=async()=>{if(!input.value.trim()){status.textContent="Pega un script Lua primero.";return}const b=$("obfuscate"),started=performance.now();b.disabled=true;b.textContent="PROCESANDO…";status.textContent="Transformando código localmente…";try{const r=await fetch("/api/obfuscate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:input.value,level:+$("level").value,encryptStrings:$("strings").checked,integrityMarker:$("integrity").checked})});const data=await r.json();if(!r.ok)throw Error(data.error);output.value=data.code;$("ratio").textContent=data.compressionRatio;$("time").textContent=Math.round(performance.now()-started)+" ms";$("build").textContent=data.hash;status.textContent="✓ Transformación completada."}catch(e){status.textContent="Error: "+e.message}finally{b.disabled=false;b.textContent="✦ OFUSCAR CÓDIGO"}};
-  </script>
+
+<div class="container">
+  <div class="header">
+    <h1>🔒 IKGONAVI Obfuscator v3.0</h1>
+    <div class="version">Ultra Anti-Tamper Edition | Keyforge + Luarph + Aqua + Anti-Sandbox</div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-section">
+      <label class="toolbar-label">Nivel de Ofuscación</label>
+      <select id="level">
+        <option value="1">Level 1 - Básico (Renombrado)</option>
+        <option value="2" selected>Level 2 - Avanzado (Strings + Números)</option>
+        <option value="3">Level 3 - Ultra (Todo + Basura)</option>
+      </select>
+    </div>
+
+    <div class="toolbar-section">
+      <label class="toolbar-label">Anti-Tamper Mode</label>
+      <select id="antiTamperMode">
+        <option value="ultra" selected>Ultra (Recomendado)</option>
+        <option value="hard">Hard (Muy Agresivo)</option>
+      </select>
+    </div>
+
+    <div class="toolbar-section">
+      <label class="toolbar-label">Protecciones</label>
+      <div class="checkbox-group">
+        <div class="checkbox-item">
+          <input type="checkbox" id="antiTamper" checked>
+          <label for="antiTamper" style="margin: 0; cursor: pointer;">Anti-Tamper</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="toolbar-section">
+      <label class="toolbar-label">&nbsp;</label>
+      <button onclick="clearInput()" style="padding: 8px 12px; font-size: 11px;">LIMPIAR</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-title">📥 INPUT - Código Lua</div>
+      <textarea id="input" placeholder="Pega aquí tu script Lua para Roblox..."></textarea>
+      <div class="info">
+        <span id="inputInfo">0 bytes</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">📤 OUTPUT - Código Protegido</div>
+      <textarea id="output" readonly placeholder="El código ofuscado aparecerá aquí..."></textarea>
+      <div class="info">
+        <span id="outputInfo">0 bytes</span>
+        <button onclick="copyOutput()" style="padding: 3px 8px; font-size: 11px;">COPIAR</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="status" id="status">✓ Listo para procesar hasta 2MB</div>
+
+  <div class="button-row">
+    <button class="obfuscate-btn" id="obfuscateBtn" onclick="doObfuscate()">⚡ OFUSCAR CÓDIGO</button>
+    <button onclick="downloadOutput()">📥 DESCARGAR</button>
+    <button onclick="clearAll()">🗑️ LIMPIAR TODO</button>
+  </div>
+
+  <div class="stats" id="stats" style="display: none;">
+    <div class="stat-box">
+      <div class="stat-label">Compresión</div>
+      <div class="stat-value" id="compression">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Tiempo de Proceso</div>
+      <div class="stat-value" id="time">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Checksum</div>
+      <div class="stat-value" id="hash" style="font-size: 12px;">—</div>
+    </div>
+  </div>
+
+  <div class="features">
+    <h3>🛡️ Protecciones Integradas</h3>
+    <ul>
+      <li><strong>Keyforge + Luarph Engine:</strong> Detección anti-beautify y traps de funciones</li>
+      <li><strong>Aqua Fingerprinting:</strong> Verificación de sandbox y environment spoofing</li>
+      <li><strong>Anti-Sandbox Detection:</strong> Detecta herramientas (Lune, Wally, Rojo) y emuladores</li>
+      <li><strong>String Encryption:</strong> XOR encryption con claves dinámicas</li>
+      <li><strong>Variable Renaming:</strong> Renombrado inteligente de variables locales</li>
+      <li><strong>Number Obfuscation:</strong> Ofuscación de constantes numéricas</li>
+      <li><strong>Code Minification:</strong> Eliminación de espacios y comentarios</li>
+      <li><strong>Primitive Integrity Checks:</strong> Verificación de funciones nativas de Lua</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+const input = document.getElementById('input');
+const output = document.getElementById('output');
+const inputInfo = document.getElementById('inputInfo');
+const outputInfo = document.getElementById('outputInfo');
+const status = document.getElementById('status');
+
+input.addEventListener('input', () => {
+  inputInfo.textContent = input.value.length + ' bytes';
+});
+
+function doObfuscate() {
+  if (!input.value.trim()) {
+    status.textContent = '❌ Error: Pega un script primero';
+    status.className = 'status error';
+    return;
+  }
+
+  const btn = document.getElementById('obfuscateBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ PROCESANDO...';
+  status.textContent = '⏳ Ofuscando código...';
+  status.className = 'status';
+
+  const level = document.getElementById('level').value;
+  const antiTamper = document.getElementById('antiTamper').checked;
+  const antiTamperMode = document.getElementById('antiTamperMode').value;
+  const startTime = performance.now();
+
+  fetch('/api/obfuscate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      code: input.value,
+      level: parseInt(level),
+      antiTamper: antiTamper,
+      antiTamperMode: antiTamperMode
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      output.value = data.code;
+      outputInfo.textContent = data.outputSize + ' bytes';
+      
+      const elapsed = Math.round(performance.now() - startTime);
+      status.textContent = `✓ Ofuscación completada en ${elapsed}ms`;
+      status.className = 'status success';
+
+      // Mostrar estadísticas
+      const statsDiv = document.getElementById('stats');
+      document.getElementById('compression').textContent = data.compressionRatio;
+      document.getElementById('time').textContent = elapsed + 'ms';
+      document.getElementById('hash').textContent = data.hash;
+      statsDiv.style.display = 'grid';
+    } else {
+      status.textContent = '❌ Error: ' + data.error;
+      status.className = 'status error';
+    }
+  })
+  .catch(e => {
+    status.textContent = '❌ Error: ' + e.message;
+    status.className = 'status error';
+  })
+  .finally(() => {
+    btn.disabled = false;
+    btn.textContent = '⚡ OFUSCAR CÓDIGO';
+  });
+}
+
+function copyOutput() {
+  if (!output.value) return;
+  navigator.clipboard.writeText(output.value).then(() => {
+    status.textContent = '✓ Código copiado al portapapeles';
+    status.className = 'status success';
+    setTimeout(() => {
+      status.textContent = '✓ Listo para procesar hasta 2MB';
+      status.className = 'status';
+    }, 2000);
+  });
+}
+
+function downloadOutput() {
+  if (!output.value) return;
+  const blob = new Blob([output.value], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'script_protected_ikgonavi.lua';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function clearInput() {
+  input.value = '';
+  inputInfo.textContent = '0 bytes';
+}
+
+function clearAll() {
+  input.value = '';
+  output.value = '';
+  inputInfo.textContent = '0 bytes';
+  outputInfo.textContent = '0 bytes';
+  status.textContent = '✓ Listo para procesar hasta 2MB';
+  status.className = 'status';
+  document.getElementById('stats').style.display = 'none';
+}
+</script>
+
 </body>
 </html>
