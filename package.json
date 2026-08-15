@@ -1,23 +1,13 @@
 {
   "name": "ikgonavi-obfuscator",
   "version": "3.0.0",
-  "description": "Ultra Anti-Tamper Lua Obfuscator for Roblox - Keyforge + Luarph + Aqua + Anti-Sandbox",
-  "main": "server-final-antitamper.js",
+  "description": "Ultra Anti-Tamper Lua Obfuscator for Roblox",
+  "main": "index.js",
   "scripts": {
-    "start": "node server-final-antitamper.js",
-    "dev": "node server-final-antitamper.js"
+    "start": "node index.js",
+    "dev": "node index.js"
   },
-  "keywords": [
-    "roblox",
-    "lua",
-    "obfuscator",
-    "protection",
-    "anti-tamper",
-    "keyforge",
-    "luarph",
-    "aqua",
-    "sandbox"
-  ],
+  "keywords": ["roblox", "lua", "obfuscator"],
   "author": "IKGONAVI Team",
   "license": "MIT",
   "dependencies": {
