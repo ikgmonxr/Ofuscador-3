@@ -1,11 +1,12 @@
 /**
- * IKGONAVI Obfuscator v3.0 — ULTRA ANTI-TAMPER
- * Integra: Keyforge, Luarph, Aqua, 978 Auth, Anti-Sandbox
- * Optimizado para scripts grandes en Roblox
+ * IKGONAVI Obfuscator v3.0 - Entry Point
+ * Punto de entrada simple para evitar problemas de rutas
  */
+
 const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -288,7 +289,6 @@ function minify(code) {
     .trim();
 }
 
-// ============ ANTI-TAMPER ULTRA ============
 function buildAntiTamper(mode = "ultra") {
   const checkId = crypto.randomBytes(3).toString("hex");
   const failFunc = `_f${checkId}`;
@@ -300,12 +300,10 @@ function buildAntiTamper(mode = "ultra") {
 
   const checks = [];
 
-  // Detección de herramientas (Lune, Wally, Rojo, etc)
   checks.push(`
 if _G.lune or _G.lute or _G.wally or _G.rojo or _G.selene or _G.darklua or _G.luau_lsp or _G.remodel or _G.plugin then ${failFunc}("tool") end
 `);
 
-  // Detección de Node.js / Browser
   checks.push(`
 if _G.process and (_G.process.env or _G.process.platform or _G.process.exit) then ${failFunc}("process") end
 if _G.window or _G.document or _G.navigator or _G.location then ${failFunc}("browser") end
@@ -313,7 +311,6 @@ if _G.Buffer and _G.Buffer.from then ${failFunc}("nodebuf") end
 if _G.__dirname or _G.__filename then ${failFunc}("nodepath") end
 `);
 
-  // Verifications de primitivos Lua
   checks.push(`
 if type(string)~="table" or type(math)~="table" or type(table)~="table" then ${failFunc}("prim") end
 if type(string.byte)~="function" or string.byte("A")~=65 then ${failFunc}("byte") end
@@ -321,7 +318,6 @@ if type(math.floor)~="function" or math.floor(3.9)~=3 then ${failFunc}("floor") 
 if bit32 and type(bit32.bxor)=="function" and bit32.bxor(85,170)~=255 then ${failFunc}("bxor") end
 `);
 
-  // Game object verification
   checks.push(`
 if type(game)==type({}) then ${failFunc}("game_table") end
 if type(typeof)=="function" and typeof(game)=="table" then ${failFunc}("typeof_game") end
@@ -329,7 +325,6 @@ local ok,mt=pcall(getmetatable,game)
 if ok and type(mt)==type({}) then ${failFunc}("mt_game") end
 `);
 
-  // Sandbox fingerprints (Aqua)
   checks.push(`
 local ZERO="00000000-0000-0000-0000-000000000000"
 local okJ,jobId=pcall(function()return game.JobId end)
@@ -338,7 +333,6 @@ local okG,gameId=pcall(function()return game.GameId end)
 if okG and gameId==8916037983 then ${failFunc}("gameid") end
 `);
 
-  // Players verification
   checks.push(`
 local okPl,Players=pcall(function()return game:GetService("Players")end)
 if not okPl or not Players then ${failFunc}("players") end
@@ -346,18 +340,15 @@ local LP=Players and Players.LocalPlayer
 if not LP then ${failFunc}("lp") end
 `);
 
-  // Package pollution detection
   checks.push(`
 if package and type(package)=="table" and (rawget(package,"lune") or rawget(package,"lute") or rawget(package,"wally") or rawget(package,"rojo")) then ${failFunc}("package") end
 `);
 
-  // Error handling trap
   checks.push(`
 local okE=pcall(error,"\\0",0)
 if okE then ${failFunc}("error") end
 `);
 
-  // Math invariants
   checks.push(`
 local w=7
 if w~=w or w*0~=0 then ${failFunc}("math") end
@@ -389,7 +380,7 @@ function obfuscateLua(source, level, options) {
   const decoder = prot.decoder || "";
   code = minify(code);
 
-  let result = "-- Protected by IKGONAVI Obfuscator v3.0 (Keyforge+Luarph+Aqua+AntiSandbox)\n";
+  let result = "-- Protected by IKGONAVI Obfuscator v3.0\n";
   
   if (options.antiTamper) {
     result += buildAntiTamper(options.antiTamperMode || "ultra") + "\n";
@@ -470,11 +461,11 @@ app.get("/", function (req, res) {
 
 app.use(express.static(path.join(__dirname, "public")));
 
-module.exports = app;
+const server = app.listen(PORT, "0.0.0.0", function () {
+  console.log(`\n✓ IKGONAVI Obfuscator v3.0 [ULTRA ANTI-TAMPER] running on port ${PORT}`);
+  console.log(`  └─ Engines: Keyforge | Luarph | Aqua | Anti-Sandbox`);
+  console.log(`  └─ URL: http://localhost:${PORT}`);
+  console.log(`\n`);
+});
 
-if (require.main === module) {
-  app.listen(PORT, "0.0.0.0", function () {
-    console.log(`✓ IKGONAVI Obfuscator v3.0 [ULTRA ANTI-TAMPER] running on port ${PORT}`);
-    console.log(`  └─ Engines: Keyforge | Luarph | Aqua | Anti-Sandbox`);
-  });
-}
+module.exports = app;
