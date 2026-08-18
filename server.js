@@ -123,17 +123,10 @@ function decodeShortString(raw) {
 }
 
 // ===================== ULTRA ANTI-TAMPER =====================
-// Compact, multi-stage, hard to strip cleanly.
-// Combines: tooling/sandbox fingerprints, primitive integrity,
-// typeof/game Instance checks, metatable traps, math/string invariants.
 function generateAntiTamper(level = 3) {
   const id = crypto.randomBytes(3).toString("hex");
   const lock = `_c${id}`;
   const run = `_a${id}`;
-
-  // Level 1: light
-  // Level 2: medium (most of the strong checks)
-  // Level 3: ultra (all + extra traps + optional hard locks)
 
   const hardLock = level >= 3
     ? `local function ${lock}()while true do end end;`
@@ -141,7 +134,6 @@ function generateAntiTamper(level = 3) {
 
   const checks = [];
 
-  // Tooling / non-Roblox environments
   checks.push(`
 if _G.lune or _G.lute or _G.wally or _G.rojo or _G.selene or _G.darklua or _G.plugin
 or _G.fetch or _G.console or _G.setTimeout or _G.Buffer or _G.window or _G.document
@@ -160,7 +152,6 @@ if getfenv then
 end
 `);
 
-  // Core Roblox presence
   checks.push(`
 if not game or not workspace then ${lock}() end
 local ok,hs=pcall(function()return game:GetService("HttpService")end)
@@ -169,14 +160,12 @@ if not pcall(function()return hs:JSONEncode({a=1})end) then ${lock}() end
 if not pcall(function()return hs:JSONDecode('{"a":1}')end) then ${lock}() end
 `);
 
-  // typeof / Instance / type invariants
   checks.push(`
 if type(typeof)~="function" or typeof(game)~="Instance" then ${lock}() end
 if type(game)==type({}) then ${lock}() end
 if type(typeof)=="function" and typeof(game)=="table" then ${lock}() end
 `);
 
-  // Primitive integrity
   checks.push(`
 if type(string.byte)~="function" or string.byte("A")~=65 then ${lock}() end
 if type(math.floor)~="function" or math.floor(math.pi)~=3 or math.floor(3.9)~=3 then ${lock}() end
@@ -190,25 +179,21 @@ if bit32 and type(bit32.band)=="function" and bit32.band(240,15)~=0 then ${lock}
 `);
   }
 
-  // Error / pcall sanity
   checks.push(`
 local okE=pcall(error,"\\0",0)
 if okE then ${lock}() end
 `);
 
-  // Metatable on game should not be a plain table
   checks.push(`
 local okM,mt=pcall(getmetatable,game)
 if okM and type(mt)==type({}) then ${lock}() end
 `);
 
-  // Numeric self-equality / multiply-by-zero
   checks.push(`
 local w=7
 if w~=w or w*0~=0 or w<0 then ${lock}() end
 `);
 
-  // Optional deeper sandbox fingerprints (safe on real clients, noisy in many emulators)
   if (level >= 3) {
     checks.push(`
 local okJ,jobId=pcall(function()return game.JobId end)
@@ -216,7 +201,6 @@ if okJ and jobId=="00000000-0000-0000-0000-000000000000" then ${lock}() end
 `);
   }
 
-  // Debug info trap (many deobfuscators / emulators expose it differently)
   checks.push(`
 if debug and debug.getinfo then
   local okD=pcall(function()return debug.getinfo(print)end)
@@ -224,7 +208,6 @@ if debug and debug.getinfo then
 end
 `);
 
-  // Package / require pollution
   checks.push(`
 if package and type(package)=="table" and (rawget(package,"lune") or rawget(package,"lute") or rawget(package,"wally") or rawget(package,"rojo")) then ${lock}() end
 `);
@@ -234,172 +217,4 @@ if package and type(package)=="table" and (rawget(package,"lune") or rawget(pack
   return `local ${run}=function()${hardLock}${body}end;${run}();`;
 }
 
-// ===================== OBFUSCATE =====================
-function obfuscate(source, options = {}) {
-  const code = String(source || "").trim();
-  if (!code) throw new Error("Script vacío");
-
-  const tokens = tokenize(code);
-  const encryptStrings = options.encryptStrings !== false;
-  const antiTamper = options.antiTamper !== false;
-  const level = Math.min(3, Math.max(1, Number(options.level) || 3));
-
-  // Rename only locals
-  const renameMap = new Map();
-  let counter = 0;
-  for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i].type === "keyword" && tokens[i].value === "local") {
-      let j = i + 1;
-      while (j < tokens.length) {
-        if (tokens[j].type === "identifier") {
-          const name = tokens[j].value;
-          if (name.length > 1 && !NEVER_RENAME.has(name) && !renameMap.has(name)) {
-            counter++;
-            renameMap.set(name, "_l" + counter.toString(36) + crypto.randomBytes(2).toString("hex"));
-          }
-          j++;
-          if (j < tokens.length && tokens[j].type === "symbol" && tokens[j].value === ",") {
-            j++;
-            continue;
-          }
-          break;
-        } else break;
-      }
-    }
-  }
-
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    if (t.type === "identifier" && renameMap.has(t.value)) {
-      const prev = i > 0 ? tokens[i - 1] : null;
-      const isProperty = prev && prev.type === "symbol" && (prev.value === "." || prev.value === ":");
-      if (!isProperty) t.value = renameMap.get(t.value);
-    }
-  }
-
-  // String encryption
-  const key = crypto.randomBytes(4);
-  const decName = "_d" + crypto.randomBytes(2).toString("hex");
-  const keyArr = [...key].join(",");
-  let body = "";
-  let prevText = "";
-
-  for (const t of tokens) {
-    let cur = t.value;
-    if (encryptStrings && t.type === "string") {
-      const decoded = decodeShortString(t.value);
-      if (
-        decoded &&
-        decoded.length > 0 &&
-        decoded.length <= 280 &&
-        !/https?:\/\//i.test(decoded) &&
-        !/rbxassetid/i.test(decoded)
-      ) {
-        const bytes = [...Buffer.from(decoded, "utf8")].map(
-          (b, idx) => b ^ key[idx % key.length]
-        );
-        cur = `${decName}({${bytes.join(",")}})`;
-      }
-    }
-    const needSpace =
-      (isWordEnd(prevText) && isWordStart(cur)) ||
-      (prevText.endsWith("-") && cur.startsWith("-"));
-    if (needSpace) body += " ";
-    body += cur;
-    prevText = cur;
-  }
-
-  const decoder = encryptStrings
-    ? `local ${decName}=function(t)local k={${keyArr}}local r={}for i=1,#t do r[i]=string.char(bit32.bxor(t[i],k[(i-1)%#k+1]))end return table.concat(r)end;`
-    : "";
-
-  const anti = antiTamper ? generateAntiTamper(level) : "";
-
-  // Everything on one line
-  const oneLine = `${anti}${decoder}${body}`.replace(/\s+/g, " ").trim();
-  const result = `-- Protect by QyrexObf\n${oneLine}`;
-
-  return {
-    code: result,
-    originalSize: code.length,
-    outputSize: result.length,
-    hash: crypto.createHash("sha256").update(result).digest("hex").slice(0, 12),
-  };
-}
-
-function sendJson(res, status, obj) {
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store",
-  });
-  res.end(JSON.stringify(obj));
-}
-
-const server = http.createServer((req, res) => {
-  if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
-    const indexPath = indexCandidates.find((c) => fs.existsSync(c));
-    if (!indexPath) return sendJson(res, 500, { error: "Falta index.html" });
-    return fs.readFile(indexPath, (err, page) => {
-      if (err) return sendJson(res, 500, { error: "No se pudo leer index.html" });
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(page);
-    });
-  }
-
-  if (req.method !== "POST" || req.url !== "/api/obfuscate") {
-    return sendJson(res, 404, { error: "Ruta no encontrada" });
-  }
-
-  let received = 0;
-  const parts = [];
-  req.on("data", (chunk) => {
-    received += chunk.length;
-    if (received > MAX_SOURCE_BYTES + 60 * 1024) {
-      req.destroy();
-      return;
-    }
-    parts.push(chunk);
-  });
-
-  req.on("end", () => {
-    let body;
-    try {
-      body = JSON.parse(Buffer.concat(parts).toString("utf8"));
-    } catch {
-      return sendJson(res, 400, { error: "JSON inválido" });
-    }
-
-    const code = body && body.code;
-    if (typeof code !== "string" || !code.trim()) {
-      return sendJson(res, 400, { error: "Pega un script primero" });
-    }
-    if (Buffer.byteLength(code, "utf8") > MAX_SOURCE_BYTES) {
-      return sendJson(res, 413, { error: "Script demasiado grande" });
-    }
-
-    try {
-      // Map UI options
-      const opts = {
-        encryptStrings: body.encryptStrings !== false,
-        antiTamper: body.antiTamper !== false && body.integrityMarker !== false, // keep anti-tamper when integrity is on
-        level: body.level || 3,
-      };
-      // Force anti-tamper on if the checkbox is present
-      if (body.integrityMarker === true) opts.antiTamper = true;
-
-      const result = obfuscate(code, opts);
-      const ratio = Math.round((result.outputSize / result.originalSize) * 100);
-      return sendJson(res, 200, {
-        success: true,
-        ...result,
-        compressionRatio: ratio + "%",
-      });
-    } catch (e) {
-      return sendJson(res, 500, { error: e.message || "Error al ofuscar" });
-    }
-  });
-});
-
-server.listen(PORT, "0.0.0.0", () => {
-  console.log("QyrexObf corriendo en puerto", PORT);
-});
+// =
