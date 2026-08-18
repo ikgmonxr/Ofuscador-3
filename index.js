@@ -20,22 +20,33 @@ function toHex(n) {
   return (v < 0 ? "-" : "") + "0x" + Math.abs(v).toString(16);
 }
 
+function toBin(n) {
+  const v = n | 0;
+  return (v < 0 ? "-" : "") + "0b" + Math.abs(v).toString(2);
+}
+
 function messyNumber(n) {
   n = n | 0;
-  const r = randInt(0, 5);
+  const r = randInt(0, 7);
   if (r === 0) return String(n);
   if (r === 1) return toHex(n);
-  if (r === 2) {
-    const a = randInt(10, 4000);
+  if (r === 2) return toBin(n);
+  if (r === 3) {
+    const a = randInt(10, 5000);
     return "(" + toHex(n + a) + "-" + toHex(a) + ")";
   }
-  if (r === 3) {
-    const a = randInt(10, 3000);
+  if (r === 4) {
+    const a = randInt(10, 4000);
     return "(" + toHex(n - a) + "+" + toHex(a) + ")";
   }
-  if (r === 4) {
-    const a = randInt(2, 40);
+  if (r === 5) {
+    const a = randInt(2, 50);
     return "(" + toHex(n * a) + "/" + a + ")";
+  }
+  if (r === 6) {
+    const a = randInt(1, 200);
+    const b = randInt(1, 200);
+    return "(" + toHex(n + a - b) + "+" + toHex(b) + "-" + toHex(a) + ")";
   }
   return toHex(n);
 }
@@ -43,8 +54,8 @@ function messyNumber(n) {
 function randomName() {
   const pool = "IlO01o";
   let s = "_";
-  for (let i = 0; i < randInt(5, 10); i++) s += pool[randInt(0, pool.length - 1)];
-  return s + randHex(2);
+  for (let i = 0; i < randInt(6, 12); i++) s += pool[randInt(0, pool.length - 1)];
+  return s + randHex(3);
 }
 
 // ===================== KEYWORDS =====================
@@ -77,12 +88,6 @@ const NEVER_RENAME = new Set([
   "checkcaller","islclosure","iscclosure","getnamecallmethod"
 ]);
 
-// Tokens that MUST have space after them if next is word-like
-const SPACE_AFTER = new Set([
-  "and","or","not","local","function","if","then","else","elseif","for","while",
-  "do","repeat","until","return","break","in","goto","end"
-]);
-
 // ===================== TOKENIZER =====================
 function isIdentStart(ch) { return /[A-Za-z_]/.test(ch || ""); }
 function isIdentPart(ch) { return /[A-Za-z0-9_]/.test(ch || ""); }
@@ -102,11 +107,8 @@ function tokenize(source) {
 
   while (i < len) {
     const ch = source[i];
-
-    // whitespace
     if (/\s/.test(ch)) { i++; continue; }
 
-    // comments
     if (source.startsWith("--", i)) {
       if (source[i + 2] === "[") {
         const end = longBracketEnd(source, i + 2);
@@ -118,7 +120,6 @@ function tokenize(source) {
       continue;
     }
 
-    // long string
     if (ch === "[" && longBracketEnd(source, i) !== null) {
       const end = longBracketEnd(source, i);
       out.push({ type: "string", value: source.slice(i, end) });
@@ -126,7 +127,6 @@ function tokenize(source) {
       continue;
     }
 
-    // short string
     if (ch === '"' || ch === "'") {
       const q = ch;
       let j = i + 1;
@@ -140,20 +140,15 @@ function tokenize(source) {
       continue;
     }
 
-    // identifier / keyword
     if (isIdentStart(ch)) {
       let j = i + 1;
       while (isIdentPart(source[j])) j++;
       const value = source.slice(i, j);
-      out.push({
-        type: luaKeywords.has(value) ? "keyword" : "ident",
-        value
-      });
+      out.push({ type: luaKeywords.has(value) ? "keyword" : "ident", value });
       i = j;
       continue;
     }
 
-    // number
     if (/[0-9]/.test(ch) || (ch === "." && /[0-9]/.test(source[i + 1] || ""))) {
       const m = source.slice(i).match(/^(?:0[xX][0-9a-fA-F_]+|0[bB][01_]+|(?:\d[\d_]*\.?[\d_]*|\.\d[\d_]*)(?:[eE][+-]?[\d_]+)?)/);
       const value = m ? m[0] : ch;
@@ -162,7 +157,6 @@ function tokenize(source) {
       continue;
     }
 
-    // operators
     const multi = ["...", "..=", "==", "~=", "<=", ">=", "//", "..", "->", "+=", "-=", "*=", "/=", "%="];
     const found = multi.find(op => source.startsWith(op, i));
     if (found) {
@@ -178,7 +172,7 @@ function tokenize(source) {
 }
 
 function decodeString(raw) {
-  if (raw.startsWith("[")) return null; // long string, skip
+  if (raw.startsWith("[")) return null;
   const q = raw[0];
   if ((q !== '"' && q !== "'") || raw[raw.length - 1] !== q) return null;
   let out = "";
@@ -192,20 +186,14 @@ function decodeString(raw) {
   return out;
 }
 
-// ===================== SAFE JOIN (nunca endend) =====================
+// ===================== SAFE JOIN =====================
 function needsSpace(prev, next) {
   if (!prev || !next) return false;
-
   const prevWord = /[A-Za-z0-9_]$/.test(prev);
   const nextWord = /^[A-Za-z0-9_]/.test(next);
   if (prevWord && nextWord) return true;
-
-  // evitar -- comentarios accidentales
   if (prev.endsWith("-") && next.startsWith("-")) return true;
-
-  // evitar .. mal pegado
   if (prev.endsWith(".") && next.startsWith(".")) return true;
-
   return false;
 }
 
@@ -219,24 +207,48 @@ function joinTokens(parts) {
   return out;
 }
 
-// ===================== ANTI TAMPER =====================
+// ===================== JUNK CODE =====================
+function generateJunk() {
+  const a = randomName();
+  const b = randomName();
+  const n1 = messyNumber(randInt(1, 9999));
+  const n2 = messyNumber(randInt(1, 9999));
+  return joinTokens([
+    `local ${a}=${n1}`,
+    `local ${b}=${n2}`,
+    `if ${a}~=${a} then`,
+    `while true do end`,
+    `end`,
+  ]);
+}
+
+// ===================== ANTI TAMPER FUERTE =====================
 function generateAntiTamper() {
   const lock = randomName();
   const run = randomName();
+  const tmp = randomName();
 
-  // Cada check separado con espacios seguros
   const checks = [
     `if not game or not workspace then ${lock}() end`,
-    `local ok,hs=pcall(function() return game:GetService("HttpService") end)`,
-    `if not ok or not hs then ${lock}() end`,
+    `local ${tmp},hs=pcall(function() return game:GetService("HttpService") end)`,
+    `if not ${tmp} or not hs then ${lock}() end`,
     `if type(typeof)~="function" or typeof(game)~="Instance" then ${lock}() end`,
+    `if type(game)==type({}) then ${lock}() end`,
     `if type(string.byte)~="function" or string.byte("A")~=65 then ${lock}() end`,
     `if type(math.floor)~="function" or math.floor(math.pi)~=3 then ${lock}() end`,
+    `if type(table.concat)~="function" then ${lock}() end`,
     `if bit32 and type(bit32.bxor)=="function" and bit32.bxor(85,170)~=255 then ${lock}() end`,
+    `if bit32 and type(bit32.band)=="function" and bit32.band(240,15)~=0 then ${lock}() end`,
     `local okE=pcall(error,"\\0",0)`,
     `if okE then ${lock}() end`,
     `local w=7`,
-    `if w~=w or w*0~=0 then ${lock}() end`,
+    `if w~=w or w*0~=0 or w<0 then ${lock}() end`,
+    `local okJ,jobId=pcall(function() return game.JobId end)`,
+    `if okJ and jobId=="00000000-0000-0000-0000-000000000000" then ${lock}() end`,
+    `if debug and debug.getinfo then`,
+    `local okD=pcall(function() return debug.getinfo(print) end)`,
+    `if okD then ${lock}() end`,
+    `end`,
   ];
 
   return joinTokens([
@@ -255,7 +267,7 @@ function obfuscate(source, options = {}) {
 
   const tokens = tokenize(code);
 
-  // --- Rename locals ---
+  // Rename locals
   const renameMap = new Map();
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i].type === "keyword" && tokens[i].value === "local") {
@@ -287,8 +299,8 @@ function obfuscate(source, options = {}) {
     }
   }
 
-  // --- String pool ---
-  const key = crypto.randomBytes(8);
+  // String pool + multi-key encryption
+  const key = crypto.randomBytes(12);
   const decName = randomName();
   const poolName = randomName();
   const stringPool = [];
@@ -303,9 +315,8 @@ function obfuscate(source, options = {}) {
     return idx;
   }
 
-  // --- Rebuild body safely ---
+  // Rebuild body
   const bodyParts = [];
-
   for (const t of tokens) {
     let cur = t.value;
 
@@ -318,7 +329,7 @@ function obfuscate(source, options = {}) {
 
     if (t.type === "string") {
       const decoded = decodeString(t.value);
-      if (decoded !== null && decoded.length > 0 && decoded.length <= 900) {
+      if (decoded !== null && decoded.length > 0 && decoded.length <= 1200) {
         const idx = poolIndex(decoded);
         cur = `${decName}(${poolName}[${messyNumber(idx + 1)}])`;
       }
@@ -329,7 +340,7 @@ function obfuscate(source, options = {}) {
 
   const body = joinTokens(bodyParts);
 
-  // --- Build pool table ---
+  // Pool table
   const poolEntries = stringPool.map((bytes, i) => {
     const arr = bytes.map(b => messyNumber(b)).join(",");
     return `[${messyNumber(i + 1)}]={${arr}}`;
@@ -350,23 +361,29 @@ function obfuscate(source, options = {}) {
   ]);
 
   const anti = options.antiTamper !== false ? generateAntiTamper() : "";
+  const junk1 = generateJunk();
+  const junk2 = generateJunk();
 
-  // --- Final wrapper (estructura válida siempre) ---
+  // Double wrapper for harder analysis
   const envName = randomName();
   const runName = randomName();
+  const proxyName = randomName();
 
   const finalParts = [
     `return (function(${envName})`,
     anti,
+    junk1,
     decoder,
+    junk2,
     `local ${runName}=function()`,
     body,
     `end`,
-    `return ${runName}()`,
+    `local ${proxyName}=${runName}`,
+    `return ${proxyName}()`,
     `end)({...})`,
   ];
 
-  const result = "--[[QyrexObf]]\n" + joinTokens(finalParts);
+  const result = "-- Protect QyrexObf\n" + joinTokens(finalParts);
 
   return {
     code: result,
@@ -413,7 +430,7 @@ const server = http.createServer((req, res) => {
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.box{width:100%;max-width:800px;background:#12121a;border:1px solid #2a2a3a;border-radius:16px;padding:28px}
+.box{width:100%;max-width:820px;background:#12121a;border:1px solid #2a2a3a;border-radius:16px;padding:28px}
 h1{font-size:22px;margin-bottom:4px}
 p{color:#9898b0;font-size:13px;margin-bottom:18px}
 textarea{width:100%;height:180px;background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;color:#e8e8f0;padding:14px;font-family:ui-monospace,monospace;font-size:12px;resize:vertical;margin-bottom:12px}
@@ -430,7 +447,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <body>
 <div class="box">
   <h1>QyrexObf</h1>
-  <p>Ofuscador seguro • sin syntax errors • strings cifradas • números hex</p>
+  <p>Protect QyrexObf • sin syntax errors • strings cifradas • anti-tamper • junk code</p>
   <textarea id="input" placeholder="Pega tu script aquí..."></textarea>
   <div class="row">
     <button id="btn" onclick="run()">Ofuscar</button>
