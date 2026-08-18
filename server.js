@@ -11,6 +11,7 @@ const MAX_SOURCE_BYTES = 900 * 1024;
 const indexCandidates = [
   path.join(__dirname, "index.html"),
   path.join(process.cwd(), "index.html"),
+  path.join(__dirname, "public", "index.html"),
 ];
 
 const luaKeywords = new Set([
@@ -217,4 +218,170 @@ if package and type(package)=="table" and (rawget(package,"lune") or rawget(pack
   return `local ${run}=function()${hardLock}${body}end;${run}();`;
 }
 
-// =
+// ===================== OBFUSCATE =====================
+function obfuscate(source, options = {}) {
+  const code = String(source || "").trim();
+  if (!code) throw new Error("Script vacío");
+
+  const tokens = tokenize(code);
+  const encryptStrings = options.encryptStrings !== false;
+  const antiTamper = options.antiTamper !== false;
+  const level = Math.min(3, Math.max(1, Number(options.level) || 3));
+
+  const renameMap = new Map();
+  let counter = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].type === "keyword" && tokens[i].value === "local") {
+      let j = i + 1;
+      while (j < tokens.length) {
+        if (tokens[j].type === "identifier") {
+          const name = tokens[j].value;
+          if (name.length > 1 && !NEVER_RENAME.has(name) && !renameMap.has(name)) {
+            counter++;
+            renameMap.set(name, "_l" + counter.toString(36) + crypto.randomBytes(2).toString("hex"));
+          }
+          j++;
+          if (j < tokens.length && tokens[j].type === "symbol" && tokens[j].value === ",") {
+            j++;
+            continue;
+          }
+          break;
+        } else break;
+      }
+    }
+  }
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.type === "identifier" && renameMap.has(t.value)) {
+      const prev = i > 0 ? tokens[i - 1] : null;
+      const isProperty = prev && prev.type === "symbol" && (prev.value === "." || prev.value === ":");
+      if (!isProperty) t.value = renameMap.get(t.value);
+    }
+  }
+
+  const key = crypto.randomBytes(4);
+  const decName = "_d" + crypto.randomBytes(2).toString("hex");
+  const keyArr = [...key].join(",");
+  let body = "";
+  let prevText = "";
+
+  for (const t of tokens) {
+    let cur = t.value;
+    if (encryptStrings && t.type === "string") {
+      const decoded = decodeShortString(t.value);
+      if (
+        decoded &&
+        decoded.length > 0 &&
+        decoded.length <= 280 &&
+        !/https?:\/\//i.test(decoded) &&
+        !/rbxassetid/i.test(decoded)
+      ) {
+        const bytes = [...Buffer.from(decoded, "utf8")].map(
+          (b, idx) => b ^ key[idx % key.length]
+        );
+        cur = `${decName}({${bytes.join(",")}})`;
+      }
+    }
+    const needSpace =
+      (isWordEnd(prevText) && isWordStart(cur)) ||
+      (prevText.endsWith("-") && cur.startsWith("-"));
+    if (needSpace) body += " ";
+    body += cur;
+    prevText = cur;
+  }
+
+  const decoder = encryptStrings
+    ? `local ${decName}=function(t)local k={${keyArr}}local r={}for i=1,#t do r[i]=string.char(bit32.bxor(t[i],k[(i-1)%#k+1]))end return table.concat(r)end;`
+    : "";
+
+  const anti = antiTamper ? generateAntiTamper(level) : "";
+
+  const oneLine = `${anti}${decoder}${body}`.replace(/\s+/g, " ").trim();
+  const result = `-- Protect by QyrexObf\n${oneLine}`;
+
+  return {
+    code: result,
+    originalSize: code.length,
+    outputSize: result.length,
+    hash: crypto.createHash("sha256").update(result).digest("hex").slice(0, 12),
+  };
+}
+
+function sendJson(res, status, obj) {
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+  res.end(JSON.stringify(obj));
+}
+
+const server = http.createServer((req, res) => {
+  if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
+    const indexPath = indexCandidates.find((c) => fs.existsSync(c));
+    if (!indexPath) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      return res.end("<h1>QyrexObf Backend Running</h1><p>API endpoint disponible en <code>/api/obfuscate</code></p>");
+    }
+    return fs.readFile(indexPath, (err, page) => {
+      if (err) return sendJson(res, 500, { error: "No se pudo leer index.html" });
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(page);
+    });
+  }
+
+  if (req.method !== "POST" || req.url !== "/api/obfuscate") {
+    return sendJson(res, 404, { error: "Ruta no encontrada" });
+  }
+
+  let received = 0;
+  const parts = [];
+  req.on("data", (chunk) => {
+    received += chunk.length;
+    if (received > MAX_SOURCE_BYTES + 60 * 1024) {
+      req.destroy();
+      return;
+    }
+    parts.push(chunk);
+  });
+
+  req.on("end", () => {
+    let body;
+    try {
+      body = JSON.parse(Buffer.concat(parts).toString("utf8"));
+    } catch {
+      return sendJson(res, 400, { error: "JSON inválido" });
+    }
+
+    const code = body && body.code;
+    if (typeof code !== "string" || !code.trim()) {
+      return sendJson(res, 400, { error: "Pega un script primero" });
+    }
+    if (Buffer.byteLength(code, "utf8") > MAX_SOURCE_BYTES) {
+      return sendJson(res, 413, { error: "Script demasiado grande" });
+    }
+
+    try {
+      const opts = {
+        encryptStrings: body.encryptStrings !== false,
+        antiTamper: body.antiTamper !== false && body.integrityMarker !== false,
+        level: body.level || 3,
+      };
+      if (body.integrityMarker === true) opts.antiTamper = true;
+
+      const result = obfuscate(code, opts);
+      const ratio = Math.round((result.outputSize / result.originalSize) * 100);
+      return sendJson(res, 200, {
+        success: true,
+        ...result,
+        compressionRatio: ratio + "%",
+      });
+    } catch (e) {
+      return sendJson(res, 500, { error: e.message || "Error al ofuscar" });
+    }
+  });
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log("QyrexObf corriendo en puerto", PORT);
+});
