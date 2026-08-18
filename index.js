@@ -2,13 +2,60 @@
 
 const crypto = require("crypto");
 const http = require("http");
-const fs = require("fs");
-const path = require("path");
 
 const PORT = Number(process.env.PORT || 3000);
 const MAX_SOURCE_BYTES = 900 * 1024;
 
-// ===================== KEYWORDS & SAFE NAMES =====================
+// ===================== UTILS =====================
+function randBytes(n = 4) {
+  return crypto.randomBytes(n).toString("hex");
+}
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function toHex(n) {
+  const h = Math.abs(n | 0).toString(16);
+  return (n < 0 ? "-" : "") + "0x" + h;
+}
+
+function toBin(n) {
+  const b = Math.abs(n | 0).toString(2);
+  return (n < 0 ? "-" : "") + "0b" + b;
+}
+
+function messyNumber(n) {
+  const styles = [
+    () => String(n),
+    () => toHex(n),
+    () => toBin(n),
+    () => {
+      const a = randInt(1, 5000);
+      return `(${toHex(n + a)}-${toHex(a)})`;
+    },
+    () => {
+      const a = randInt(1, 3000);
+      return `(${toHex(n - a)}+${toHex(a)})`;
+    },
+    () => {
+      const a = randInt(2, 50);
+      return `(${toHex(n * a)}/${a})`;
+    },
+  ];
+  return styles[randInt(0, styles.length - 1)]();
+}
+
+function randomName() {
+  const chars = "IlO0o1";
+  let s = "_";
+  for (let i = 0; i < randInt(6, 12); i++) {
+    s += chars[randInt(0, chars.length - 1)];
+  }
+  return s + randBytes(2);
+}
+
+// ===================== KEYWORDS =====================
 const luaKeywords = new Set([
   "and","break","do","else","elseif","end","false","for","function","goto",
   "if","in","local","nil","not","or","repeat","return","then","true","until","while",
@@ -35,7 +82,7 @@ const NEVER_RENAME = new Set([
   "NumberRange","PhysicalProperties","Axes","Faces","Rect",
   "HttpGet","loadstring","getgenv","getrenv","getsenv","getrawmetatable",
   "setreadonly","isreadonly","hookfunction","hookmetamethod","newcclosure",
-  "checkcaller","islclosure","iscclosure","getnamecallmethod","setnamecallmethod"
+  "checkcaller","islclosure","iscclosure","getnamecallmethod"
 ]);
 
 // ===================== TOKENIZER =====================
@@ -128,121 +175,35 @@ function decodeShortString(raw) {
   return out;
 }
 
-// ===================== ANTI-TAMPER (FUERTE) =====================
-function generateAntiTamper(level = 3) {
-  const id = crypto.randomBytes(4).toString("hex");
+// ===================== ANTI TAMPER =====================
+function generateAntiTamper() {
+  const id = randBytes(4);
   const lock = `_c${id}`;
   const run = `_a${id}`;
 
-  const hardLock = level >= 3
-    ? `local function ${lock}()while true do end end;`
-    : `local function ${lock}()error("Protected",0)end;`;
-
-  const checks = [];
-
-  checks.push(`
-if _G.lune or _G.lute or _G.wally or _G.rojo or _G.selene or _G.darklua or _G.plugin
-or _G.fetch or _G.console or _G.setTimeout or _G.Buffer or _G.window or _G.document
-or _G.navigator or _G.location or _G.process or _G.globalThis or _G.XMLHttpRequest
-or _G.WebSocket or _G.localStorage or _G.sessionStorage then ${lock}() end
-`);
-
-  checks.push(`
-if _G.require and (pcall(function()return _G.require("lune")end) or pcall(function()return _G.require("lute")end)) then ${lock}() end
-`);
-
-  checks.push(`
-if getfenv then
-  local e=getfenv(0) or getfenv()
-  if e and (e.lune or e.lute or e.process or e.fs or e.io or e.plugin) then ${lock}() end
-end
-`);
-
-  checks.push(`
-if not game or not workspace then ${lock}() end
-local ok,hs=pcall(function()return game:GetService("HttpService")end)
-if not ok or not hs then ${lock}() end
-if not pcall(function()return hs:JSONEncode({a=1})end) then ${lock}() end
-if not pcall(function()return hs:JSONDecode('{"a":1}')end) then ${lock}() end
-`);
-
-  checks.push(`
-if type(typeof)~="function" or typeof(game)~="Instance" then ${lock}() end
-if type(game)==type({}) then ${lock}() end
-if type(typeof)=="function" and typeof(game)=="table" then ${lock}() end
-`);
-
-  checks.push(`
-if type(string.byte)~="function" or string.byte("A")~=65 then ${lock}() end
-if type(math.floor)~="function" or math.floor(math.pi)~=3 or math.floor(3.9)~=3 then ${lock}() end
-if type(string)~="table" or type(math)~="table" or type(table)~="table" then ${lock}() end
-`);
-
-  if (level >= 2) {
-    checks.push(`
-if bit32 and type(bit32.bxor)=="function" and bit32.bxor(85,170)~=255 then ${lock}() end
-if bit32 and type(bit32.band)=="function" and bit32.band(240,15)~=0 then ${lock}() end
-`);
-  }
-
-  checks.push(`
-local okE=pcall(error,"\\0",0)
-if okE then ${lock}() end
-`);
-
-  checks.push(`
-local okM,mt=pcall(getmetatable,game)
-if okM and type(mt)==type({}) then ${lock}() end
-`);
-
-  checks.push(`
-local w=7
-if w~=w or w*0~=0 or w<0 then ${lock}() end
-`);
-
-  if (level >= 3) {
-    checks.push(`
-local okJ,jobId=pcall(function()return game.JobId end)
-if okJ and jobId=="00000000-0000-0000-0000-000000000000" then ${lock}() end
-`);
-  }
-
-  checks.push(`
-if debug and debug.getinfo then
-  local okD=pcall(function()return debug.getinfo(print)end)
-  if okD then ${lock}() end
-end
-`);
-
-  checks.push(`
-if package and type(package)=="table" and (rawget(package,"lune") or rawget(package,"lute") or rawget(package,"wally") or rawget(package,"rojo")) then ${lock}() end
-`);
-
-  const body = checks.map(c => c.replace(/\s+/g, " ").trim()).join("");
-  return `local ${run}=function()${hardLock}${body}end;${run}();`;
+  return `local function ${lock}()while true do end end;local ${run}=function()` +
+    `if not game or not workspace then ${lock}()end ` +
+    `local ok,hs=pcall(function()return game:GetService("HttpService")end)if not ok or not hs then ${lock}()end ` +
+    `if type(typeof)~="function" or typeof(game)~="Instance" then ${lock}()end ` +
+    `if type(string.byte)~="function" or string.byte("A")~=65 then ${lock}()end ` +
+    `if type(math.floor)~="function" or math.floor(math.pi)~=3 then ${lock}()end ` +
+    `if bit32 and type(bit32.bxor)=="function" and bit32.bxor(85,170)~=255 then ${lock}()end ` +
+    `local okE=pcall(error,"\\0",0)if okE then ${lock}()end ` +
+    `local w=7 if w~=w or w*0~=0 then ${lock}()end ` +
+    `end;${run}();`;
 }
 
-// ===================== STRING ENCRYPTION =====================
-function encryptString(str, key) {
-  const bytes = [...Buffer.from(str, "utf8")].map(
-    (b, idx) => b ^ key[idx % key.length]
-  );
-  return bytes;
-}
-
-// ===================== MAIN OBFUSCATOR =====================
+// ===================== HEAVY OBFUSCATOR =====================
 function obfuscate(source, options = {}) {
   const code = String(source || "").trim();
   if (!code) throw new Error("Script vacío");
 
   const tokens = tokenize(code);
-  const encryptStrings = options.encryptStrings !== false;
-  const antiTamper = options.antiTamper !== false;
   const level = Math.min(3, Math.max(1, Number(options.level) || 3));
 
+  // 1) Rename locals
   const renameMap = new Map();
   let counter = 0;
-
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i].type === "keyword" && tokens[i].value === "local") {
       let j = i + 1;
@@ -251,7 +212,7 @@ function obfuscate(source, options = {}) {
           const name = tokens[j].value;
           if (name.length > 1 && !NEVER_RENAME.has(name) && !renameMap.has(name)) {
             counter++;
-            renameMap.set(name, "_l" + counter.toString(36) + crypto.randomBytes(2).toString("hex"));
+            renameMap.set(name, randomName());
           }
           j++;
           if (j < tokens.length && tokens[j].type === "symbol" && tokens[j].value === ",") {
@@ -273,9 +234,25 @@ function obfuscate(source, options = {}) {
     }
   }
 
-  const key = crypto.randomBytes(6);
-  const decName = "_d" + crypto.randomBytes(3).toString("hex");
-  const keyArr = [...key].join(",");
+  // 2) String + number encryption
+  const key = crypto.randomBytes(8);
+  const decName = randomName();
+  const poolName = randomName();
+  const keyArr = [...key];
+
+  const stringPool = [];
+  const poolMap = new Map();
+
+  function addToPool(str) {
+    if (poolMap.has(str)) return poolMap.get(str);
+    const encrypted = [...Buffer.from(str, "utf8")].map(
+      (b, idx) => b ^ key[idx % key.length]
+    );
+    const idx = stringPool.length;
+    stringPool.push(encrypted);
+    poolMap.set(str, idx);
+    return idx;
+  }
 
   let body = "";
   let prevText = "";
@@ -283,12 +260,20 @@ function obfuscate(source, options = {}) {
   for (const t of tokens) {
     let cur = t.value;
 
-    if (encryptStrings && t.type === "string") {
+    // Numbers → messy hex/bin expressions
+    if (t.type === "number") {
+      const num = Number(t.value);
+      if (!isNaN(num) && Number.isFinite(num) && Math.abs(num) < 1e9 && Number.isInteger(num)) {
+        cur = messyNumber(num);
+      }
+    }
+
+    // Strings → pool + decrypt
+    if (t.type === "string") {
       const decoded = decodeShortString(t.value);
-      // Encriptamos URLs también (importante para hubs)
-      if (decoded && decoded.length > 0 && decoded.length <= 600) {
-        const bytes = encryptString(decoded, key);
-        cur = `${decName}({${bytes.join(",")}})`;
+      if (decoded && decoded.length > 0 && decoded.length <= 800) {
+        const idx = addToPool(decoded);
+        cur = `${decName}(${poolName}[${messyNumber(idx + 1)}])`;
       }
     }
 
@@ -301,14 +286,36 @@ function obfuscate(source, options = {}) {
     prevText = cur;
   }
 
-  const decoder = encryptStrings
-    ? `local ${decName}=function(t)local k={${keyArr}}local r={}for i=1,#t do r[i]=string.char(bit32.bxor(t[i],k[(i-1)%#k+1]))end return table.concat(r)end;`
-    : "";
+  // Build string pool table
+  const poolEntries = stringPool.map((bytes, i) => {
+    const arr = bytes.map(b => messyNumber(b)).join(",");
+    return `[${messyNumber(i + 1)}]={${arr}}`;
+  }).join(",");
 
-  const anti = antiTamper ? generateAntiTamper(level) : "";
+  const keyExpr = keyArr.map(k => messyNumber(k)).join(",");
 
-  const oneLine = `${anti}${decoder}${body}`.replace(/\s+/g, " ").trim();
-  const result = `-- Protect by QyrexObf\n${oneLine}`;
+  // Decoder
+  const decoder =
+    `local ${poolName}={${poolEntries}};` +
+    `local ${decName}=function(t)local k={${keyExpr}}local r={}for i=1,#t do r[i]=string.char(bit32.bxor(t[i],k[(i-1)%#k+1]))end return table.concat(r)end;`;
+
+  // Anti-tamper
+  const anti = options.antiTamper !== false ? generateAntiTamper() : "";
+
+  // Final wrapper estilo Luraph (return table + call)
+  const wrapperName = randomName();
+  const envName = randomName();
+  const runName = randomName();
+
+  const wrapped =
+    `return(function(${envName})` +
+    anti +
+    decoder +
+    `local ${runName}=function()${body}end;` +
+    `return ${runName}()` +
+    `end)({...})`;
+
+  const result = `--[[QyrexObf]]\n${wrapped.replace(/\s+/g, " ").trim()}`;
 
   return {
     code: result,
@@ -318,7 +325,7 @@ function obfuscate(source, options = {}) {
   };
 }
 
-// ===================== HTTP SERVER =====================
+// ===================== SERVER =====================
 function sendJson(res, status, obj) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
@@ -349,72 +356,64 @@ const server = http.createServer((req, res) => {
     return res.end(`<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QyrexObf</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-    .box{width:100%;max-width:720px;background:#12121a;border:1px solid #2a2a3a;border-radius:16px;padding:28px}
-    h1{font-size:22px;margin-bottom:6px}
-    p{color:#9898b0;font-size:14px;margin-bottom:20px}
-    textarea{width:100%;height:180px;background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;color:#e8e8f0;padding:14px;font-family:monospace;font-size:13px;resize:vertical;margin-bottom:14px}
-    textarea:focus{outline:none;border-color:#7c5cfc}
-    .row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-    button{background:#7c5cfc;color:#fff;border:none;border-radius:10px;padding:12px 20px;font-weight:600;cursor:pointer;font-size:14px}
-    button:hover{background:#6a4ae0}
-    button:disabled{opacity:.5;cursor:not-allowed}
-    .out{margin-top:16px}
-    .meta{font-size:12px;color:#9898b0;margin-top:8px}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QyrexObf</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.box{width:100%;max-width:780px;background:#12121a;border:1px solid #2a2a3a;border-radius:16px;padding:28px}
+h1{font-size:22px;margin-bottom:4px}
+p{color:#9898b0;font-size:13px;margin-bottom:18px}
+textarea{width:100%;height:170px;background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;color:#e8e8f0;padding:14px;font-family:ui-monospace,monospace;font-size:12px;resize:vertical;margin-bottom:12px}
+textarea:focus{outline:none;border-color:#7c5cfc}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+button{background:#7c5cfc;color:#fff;border:none;border-radius:10px;padding:11px 18px;font-weight:600;cursor:pointer;font-size:13px}
+button:hover{background:#6a4ae0}
+button.sec{background:#1a1a25;border:1px solid #2a2a3a}
+button:disabled{opacity:.5;cursor:not-allowed}
+.meta{font-size:12px;color:#9898b0;margin-top:6px}
+</style>
 </head>
 <body>
-  <div class="box">
-    <h1>QyrexObf</h1>
-    <p>Motor de ofuscación para scripts de Roblox (Hubs / loadstring)</p>
-    <textarea id="input" placeholder="Pega tu script aquí..."></textarea>
-    <div class="row">
-      <button id="btn" onclick="run()">Ofuscar</button>
-      <button onclick="copyOut()" style="background:#1a1a25;border:1px solid #2a2a3a">Copiar resultado</button>
-    </div>
-    <div class="out">
-      <textarea id="output" placeholder="Resultado ofuscado..." readonly></textarea>
-      <div class="meta" id="meta"></div>
-    </div>
+<div class="box">
+  <h1>QyrexObf</h1>
+  <p>Motor estilo Luraph • números hex/bin • strings cifradas • anti-tamper</p>
+  <textarea id="input" placeholder="Pega tu script aquí (loadstring, hub, etc)..."></textarea>
+  <div class="row">
+    <button id="btn" onclick="run()">Ofuscar</button>
+    <button class="sec" onclick="copyOut()">Copiar resultado</button>
   </div>
-  <script>
-    async function run(){
-      const code = document.getElementById('input').value;
-      if(!code.trim()) return alert('Pega un script primero');
-      const btn = document.getElementById('btn');
-      btn.disabled = true;
-      btn.textContent = 'Ofuscando...';
-      try{
-        const res = await fetch('/api/obfuscate', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ code, level: 3, encryptStrings: true, antiTamper: true })
-        });
-        const data = await res.json();
-        if(data.success){
-          document.getElementById('output').value = data.code;
-          document.getElementById('meta').textContent = 
-            'Original: ' + data.originalSize + ' chars  →  Ofuscado: ' + data.outputSize + ' chars  |  Hash: ' + data.hash;
-        } else {
-          alert(data.error || 'Error');
-        }
-      } catch(e){
-        alert('Error de conexión');
-      }
-      btn.disabled = false;
-      btn.textContent = 'Ofuscar';
-    }
-    function copyOut(){
-      const t = document.getElementById('output');
-      t.select();
-      navigator.clipboard.writeText(t.value);
-    }
-  </script>
+  <textarea id="output" placeholder="Resultado ofuscado..." readonly></textarea>
+  <div class="meta" id="meta"></div>
+</div>
+<script>
+async function run(){
+  const code=document.getElementById('input').value;
+  if(!code.trim())return alert('Pega un script primero');
+  const btn=document.getElementById('btn');
+  btn.disabled=true;btn.textContent='Ofuscando...';
+  try{
+    const res=await fetch('/api/obfuscate',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code,level:3,antiTamper:true})
+    });
+    const data=await res.json();
+    if(data.success){
+      document.getElementById('output').value=data.code;
+      document.getElementById('meta').textContent=
+        'Original: '+data.originalSize+' → Ofuscado: '+data.outputSize+' | Hash: '+data.hash;
+    }else alert(data.error||'Error');
+  }catch(e){alert('Error de conexión');}
+  btn.disabled=false;btn.textContent='Ofuscar';
+}
+function copyOut(){
+  const t=document.getElementById('output');
+  t.select();
+  navigator.clipboard.writeText(t.value);
+}
+</script>
 </body>
 </html>`);
   }
@@ -452,19 +451,14 @@ const server = http.createServer((req, res) => {
     }
 
     try {
-      const opts = {
-        encryptStrings: body.encryptStrings !== false,
-        antiTamper: body.antiTamper !== false,
+      const result = obfuscate(code, {
         level: body.level || 3,
-      };
-
-      const result = obfuscate(code, opts);
-      const ratio = Math.round((result.outputSize / result.originalSize) * 100);
-
+        antiTamper: body.antiTamper !== false,
+      });
       return sendJson(res, 200, {
         success: true,
         ...result,
-        compressionRatio: ratio + "%",
+        compressionRatio: Math.round((result.outputSize / result.originalSize) * 100) + "%",
       });
     } catch (e) {
       return sendJson(res, 500, { error: e.message || "Error al ofuscar" });
