@@ -28,7 +28,7 @@ app.get('/api/health', (req, res) => {
 app.post('/api/obfuscate', (req, res) => {
   try {
     const code = (req.body && (req.body.code || req.body.source)) || '';
-    const preset = (req.body && req.body.preset) || 'normal';
+    const preset = (req.body && req.body.preset) || 'maximum';
     const antiTamper = req.body && req.body.antiTamper === false ? false : true;
     if (!String(code).trim()) {
       return res.status(400).json({ success: false, error: 'code required' });
