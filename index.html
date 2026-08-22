@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>QyrexObf</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body{font-family:Inter,system-ui,sans-serif;background:#07070c;color:#e4e4ed;margin:0;min-height:100vh}
+.card{background:rgba(17,17,24,.9);border:1px solid #1c1c28;border-radius:16px}
+textarea{width:100%;min-height:220px;background:#0c0c12;border:1px solid #252533;border-radius:12px;color:#e4e4ed;padding:12px;font-family:monospace;font-size:12px}
+.btn{background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:10px;padding:12px 20px;font-weight:600;cursor:pointer}
+select{background:#0c0c12;border:1px solid #252533;color:#e4e4ed;border-radius:10px;padding:10px}
+</style></head>
+<body class="p-6 max-w-5xl mx-auto">
+<h1 class="text-2xl font-bold mb-1">QyrexObf</h1>
+<p class="text-sm mb-6" style="color:#6b6b80">Prometheus VM · EncryptStrings · ConstantArray · AntiTamper · Name mangling</p>
+<div class="card p-5 mb-4">
+<textarea id="src" placeholder="Lua / Luau code..."></textarea>
+<div class="flex flex-wrap gap-3 mt-3 items-center">
+<select id="preset">
+<option value="weak">Weak</option>
+<option value="medium" selected>Medium</option>
+<option value="strong">Strong</option>
+</select>
+<label class="text-sm" style="color:#8b8b9e"><input type="checkbox" id="anti" checked/> Anti-tamper extra</label>
+<button class="btn" onclick="run()">Ofuscar</button>
+</div>
+<p id="err" class="text-red-400 text-sm mt-2 hidden"></p>
+<p id="meta" class="text-xs mt-2" style="color:#5a5a6e"></p>
+</div>
+<div class="card p-5"><textarea id="out" readonly></textarea></div>
+<script>
+async function run(){
+  const err=document.getElementById('err'); err.classList.add('hidden');
+  try{
+    const r=await fetch('/api/obfuscate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      code:document.getElementById('src').value,
+      preset:document.getElementById('preset').value,
+      antiTamper:document.getElementById('anti').checked
+    })});
+    const d=await r.json();
+    if(!r.ok||!d.success) throw new Error(d.error||'Error');
+    document.getElementById('out').value=d.code;
+    document.getElementById('meta').textContent=`engine=${d.engine} · ${d.bytesIn}→${d.bytesOut} bytes`;
+  }catch(e){err.textContent=e.message;err.classList.remove('hidden');}
+}
+</script>
+</body></html>
